@@ -1,0 +1,171 @@
+|-- .eslintrc.js
+|-- .gitignore
+|-- .prettierrc
+|-- db-first-command.txt
+|-- dbo.sql
+|-- LICENSE
+|-- nest-cli.json
+|-- package-lock.json
+|-- package.json
+|-- private.key
+|-- public.key
+|-- README.md
+|-- refreshtoken.private.key
+|-- src
+    |-- app.controller.spec.ts
+    |-- app.controller.ts
+    |-- app.module.ts
+    |-- app.service.ts
+    |-- assets
+        |-- email-form-confirmation.html
+        |-- email-register-verification.html
+        |-- email-reset-password-otp.html
+    |-- common
+        |-- constant
+            |-- api-response.constant.ts
+            |-- auth-error.constant.ts
+            |-- date.constant.ts
+            |-- employee-user-error.constant.ts
+            |-- locations.constant.ts
+            |-- model.constant.ts
+            |-- role.constant.ts
+            |-- scanner.constant.ts
+            |-- status.constants.ts
+            |-- timestamp.constant.ts
+            |-- units.constant.ts
+        |-- decorator
+            |-- api-filter-query.ts
+        |-- utils
+            |-- utils.ts
+    |-- controller
+        |-- auth
+            |-- auth.controller.spec.ts
+            |-- auth.controller.ts
+            |-- auth.module.ts
+        |-- employee-user
+            |-- employee-user.controller.spec.ts
+            |-- employee-user.controller.ts
+            |-- employee-user.module.ts
+        |-- locations
+            |-- locations.controller.spec.ts
+            |-- locations.controller.ts
+            |-- locations.module.ts
+        |-- model
+            |-- model.controller.spec.ts
+            |-- model.controller.ts
+            |-- model.module.ts
+        |-- role
+            |-- role.controller.spec.ts
+            |-- role.controller.ts
+            |-- role.module.ts
+        |-- scanner
+            |-- scanner.controller.spec.ts
+            |-- scanner.controller.ts
+            |-- scanner.module.ts
+        |-- system-config
+            |-- system-config.controller.spec.ts
+            |-- system-config.controller.ts
+            |-- system-config.module.ts
+        |-- unit
+            |-- units.controller.spec.ts
+            |-- units.controller.ts
+            |-- units.module.ts
+    |-- core
+        |-- auth
+            |-- get-user.decorator.ts
+            |-- jwt-auth.guard.ts
+            |-- jwt.strategy.ts
+            |-- refresh-token.guard.ts
+            |-- refresh-token.strategy.ts
+        |-- dto
+            |-- array-constraint.dto.ts
+            |-- auth
+                |-- login.dto.ts
+                |-- register.dto.ts
+                |-- reset-password.dto.ts
+                |-- verify.dto.ts
+            |-- employee-user
+                |-- employee-user-base.dto.ts
+                |-- employee-user.create.dto.ts
+                |-- employee-user.update.dto.ts
+            |-- locations
+                |-- locations-base.dto.ts
+                |-- locations.create.dto.ts
+                |-- locations.update.dto.ts
+            |-- match.decorator.dto.ts
+            |-- model
+                |-- model-base.dto.ts
+                |-- model.create.dto.ts
+                |-- model.update-order.dto.ts
+                |-- model.update.dto.ts
+            |-- non-negative.dto.ts
+            |-- pagination-params.dto.ts
+            |-- roles
+                |-- roles-base.dto.ts
+                |-- roles.create.dto.ts
+                |-- roles.update.dto.ts
+            |-- scanner
+                |-- scanner-base.dto.ts
+                |-- scanner.create.dto.ts
+                |-- scanner.update.dto.ts
+            |-- unit
+                |-- unit-base.dto.ts
+                |-- unit-logs.dto.ts
+                |-- unit.create.dto.ts
+                |-- unit.update.dto.ts
+        |-- interfaces
+            |-- login-status.interface.ts
+            |-- payload.interface.ts
+            |-- regisration-status.interface.ts
+            |-- tokenPayload.interface.ts
+        |-- models
+            |-- api-response.model.ts
+        |-- provider
+            |-- firebase
+                |-- firebase-provider.module.ts
+                |-- firebase-provider.spec.ts
+                |-- firebase-provider.ts
+    |-- db
+        |-- entities
+            |-- EmployeeUserActivityLogs.ts
+            |-- EmployeeUsers.ts
+            |-- File.ts
+            |-- Locations.ts
+            |-- Model.ts
+            |-- Roles.ts
+            |-- Scanner.ts
+            |-- Status.ts
+            |-- SystemConfig.ts
+            |-- UnitLogs.ts
+            |-- Units.ts
+        |-- ormconfig.json
+        |-- tsconfig.json
+        |-- typeorm
+            |-- typeorm.service.ts
+    |-- envs
+        |-- .env
+        |-- development.env
+    |-- main.ts
+    |-- services
+        |-- auth.service.spec.ts
+        |-- auth.service.ts
+        |-- email.service.spec.ts
+        |-- email.service.ts
+        |-- employee-user.service.spec.ts
+        |-- employee-user.service.ts
+        |-- locations.service.spec.ts
+        |-- locations.service.ts
+        |-- model.service.spec.ts
+        |-- model.service.ts
+        |-- pusher.service.spec.ts
+        |-- pusher.service.ts
+        |-- roles.service.spec.ts
+        |-- roles.service.ts
+        |-- scanner.service.spec.ts
+        |-- scanner.service.ts
+        |-- system-config.service.spec.ts
+        |-- system-config.service.ts
+        |-- units.service.spec.ts
+        |-- units.service.ts
+|-- tsconfig.json
+|-- vercel.json
