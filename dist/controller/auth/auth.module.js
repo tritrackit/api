@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("../../services/auth.service");
+const passport_1 = require("@nestjs/passport");
 const jwt_1 = require("@nestjs/jwt");
 const auth_controller_1 = require("./auth.controller");
 const typeorm_1 = require("@nestjs/typeorm");
@@ -16,13 +17,19 @@ const email_service_1 = require("../../services/email.service");
 const EmployeeUsers_1 = require("../../db/entities/EmployeeUsers");
 const jwt_strategy_1 = require("../../core/auth/jwt.strategy");
 const employee_user_module_1 = require("../employee-user/employee-user.module");
+const refresh_token_strategy_1 = require("../../core/auth/refresh-token.strategy");
 let AuthModule = class AuthModule {
 };
 AuthModule = __decorate([
     (0, common_1.Module)({
-        imports: [employee_user_module_1.EmployeeUserModule, typeorm_1.TypeOrmModule.forFeature([EmployeeUsers_1.EmployeeUsers])],
+        imports: [
+            employee_user_module_1.EmployeeUserModule,
+            passport_1.PassportModule.register({}),
+            jwt_1.JwtModule.register({}),
+            typeorm_1.TypeOrmModule.forFeature([EmployeeUsers_1.EmployeeUsers]),
+        ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, email_service_1.EmailService, jwt_1.JwtService, jwt_strategy_1.JwtStrategy],
+        providers: [auth_service_1.AuthService, email_service_1.EmailService, jwt_strategy_1.JwtStrategy, refresh_token_strategy_1.RefreshTokenStrategy],
         exports: [auth_service_1.AuthService, email_service_1.EmailService],
     })
 ], AuthModule);

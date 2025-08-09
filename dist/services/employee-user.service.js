@@ -28,21 +28,36 @@ let EmployeeUserService = class EmployeeUserService {
         this.emailService = emailService;
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
+        var _a, _b;
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
         const take = Number(pageSize);
+        const nameFilter = columnDef.find((x) => x.apiNotation === "name");
         const condition = (0, utils_1.columnDefToTypeORMCondition)(columnDef);
+        if (nameFilter) {
+            delete condition["name"];
+        }
+        let whereCondition;
+        if (nameFilter) {
+            whereCondition = [
+                Object.assign(Object.assign({}, condition), { active: true, firstName: (0, typeorm_2.ILike)(`%${(_a = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _a !== void 0 ? _a : ""}%`) }),
+                Object.assign(Object.assign({}, condition), { active: true, lastName: (0, typeorm_2.ILike)(`%${(_b = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _b !== void 0 ? _b : ""}%`) }),
+            ];
+        }
+        else {
+            whereCondition = Object.assign(Object.assign({}, condition), { active: true });
+        }
         const [results, total] = await Promise.all([
             this.employeeUserRepo.find({
-                where: Object.assign(Object.assign({}, condition), { active: true }),
+                where: whereCondition,
                 relations: {
-                    role: true
+                    role: true,
                 },
                 skip,
                 take,
                 order,
             }),
             this.employeeUserRepo.count({
-                where: Object.assign(Object.assign({}, condition), { active: true }),
+                where: whereCondition,
             }),
         ]);
         return {

@@ -11,20 +11,26 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RefreshTokenStrategy = void 0;
 const common_1 = require("@nestjs/common");
-const config_1 = require("@nestjs/config");
 const passport_1 = require("@nestjs/passport");
 const passport_jwt_1 = require("passport-jwt");
+const config_1 = require("@nestjs/config");
+function cookieExtractor(req) {
+    var _a, _b;
+    return (_b = (_a = req === null || req === void 0 ? void 0 : req.cookies) === null || _a === void 0 ? void 0 : _a.refreshToken) !== null && _b !== void 0 ? _b : null;
+}
 let RefreshTokenStrategy = class RefreshTokenStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, "jwt-refresh") {
     constructor(config) {
         super({
-            jwtFromRequest: passport_jwt_1.ExtractJwt.fromBodyField("refreshToken"),
+            jwtFromRequest: passport_jwt_1.ExtractJwt.fromExtractors([cookieExtractor]),
             secretOrKey: config.get("REFRESH_SECRET"),
+            ignoreExpiration: false,
             passReqToCallback: true,
         });
         this.config = config;
     }
     validate(req, payload) {
-        return Object.assign(Object.assign({}, payload), { refreshToken: req.body.refreshToken });
+        const refreshToken = cookieExtractor(req);
+        return Object.assign(Object.assign({}, payload), { refreshToken });
     }
 };
 RefreshTokenStrategy = __decorate([

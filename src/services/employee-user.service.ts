@@ -22,7 +22,7 @@ import {
   UpdateEmployeeUserProfileDto,
 } from "src/core/dto/employee-user/employee-user.update.dto";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
-import { Repository, In } from "typeorm";
+import { Repository, In, ILike } from "typeorm";
 import {
   EMPLOYEE_EMAIL_ERROR_USER_DUPLICATE,
   EMPLOYEE_USER_ERROR_USER_DUPLICATE,
@@ -43,27 +43,53 @@ export class EmployeeUserService {
     const skip =
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
     const take = Number(pageSize);
+
+    const nameFilter = (columnDef as any[]).find(
+      (x) => x.apiNotation === "name"
+    );
     const condition = columnDefToTypeORMCondition(columnDef);
-    const [results, total] = await Promise.all([
-      this.employeeUserRepo.find({
-        where: {
+    if (nameFilter) {
+      delete condition["name"];
+    }
+
+    // Build WHERE condition
+    let whereCondition: any;
+    if (nameFilter) {
+      // OR condition for firstName and lastName
+      whereCondition = [
+        {
           ...condition,
           active: true,
+          firstName: ILike(`%${nameFilter?.filter ?? ""}%`),
         },
+        {
+          ...condition,
+          active: true,
+          lastName: ILike(`%${nameFilter?.filter ?? ""}%`),
+        },
+      ];
+    } else {
+      whereCondition = {
+        ...condition,
+        active: true,
+      };
+    }
+
+    const [results, total] = await Promise.all([
+      this.employeeUserRepo.find({
+        where: whereCondition,
         relations: {
-          role: true
+          role: true,
         },
         skip,
         take,
         order,
       }),
       this.employeeUserRepo.count({
-        where: {
-          ...condition,
-          active: true,
-        },
+        where: whereCondition,
       }),
     ]);
+
     return {
       results: results.map((x) => {
         delete x?.password;

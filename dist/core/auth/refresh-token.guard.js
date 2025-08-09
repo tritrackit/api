@@ -6,13 +6,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RefreshTokenGuard = void 0;
+exports.RefreshGuard = void 0;
 const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
-let RefreshTokenGuard = class RefreshTokenGuard extends (0, passport_1.AuthGuard)("jwt-refresh") {
+let RefreshGuard = class RefreshGuard extends (0, passport_1.AuthGuard)("jwt-refresh") {
 };
-RefreshTokenGuard = __decorate([
+RefreshGuard = __decorate([
     (0, common_1.Injectable)()
-], RefreshTokenGuard);
-exports.RefreshTokenGuard = RefreshTokenGuard;
+], RefreshGuard);
+exports.RefreshGuard = RefreshGuard;
 //# sourceMappingURL=refresh-token.guard.js.map

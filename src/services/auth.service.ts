@@ -12,7 +12,7 @@ import {
   generateOTP,
   getFullName,
   hash,
-  getDate
+  getDate,
 } from "src/common/utils/utils";
 import { InjectRepository } from "@nestjs/typeorm";
 import { FindOneOptions, In, Repository } from "typeorm";
@@ -39,7 +39,7 @@ export class AuthService {
     private readonly config: ConfigService
   ) {}
 
-  async getUserByCredentials({ userName, password }) {
+  async login({ userName, password }) {
     try {
       const employeeUser = await this.employeeUserRepo.findOne({
         where: {
@@ -150,5 +150,46 @@ export class AuthService {
     employeeUser.refreshToken = refreshToken;
     await this.employeeUserRepo.save(employeeUser);
     return { accessToken, refreshToken };
+  }
+
+  async getNewAccessAndRefreshToken(
+    refreshToken: string,
+    employeeUserId: string
+  ) {
+    const employeeUser = await this.employeeUserRepo.findOne({
+      where: {
+        refreshToken,
+        employeeUserId,
+        active: true,
+      },
+      relations: {
+        role: true,
+      },
+    });
+
+    if (!employeeUser) {
+      throw new ForbiddenException("Invalid token");
+    }
+    return await this.issueTokens(
+      employeeUser.employeeUserId,
+      employeeUser.email
+    );
+  }
+
+  async logOut(employeeUserId: string) {
+    const employeeUser = await this.employeeUserRepo.findOne({
+      where: {
+        employeeUserId,
+        active: true,
+      },
+      relations: {
+        role: true,
+      },
+    });
+
+    if (employeeUser) {
+      employeeUser.refreshToken = null;
+      await this.employeeUserRepo.save(employeeUser);
+    }
   }
 }

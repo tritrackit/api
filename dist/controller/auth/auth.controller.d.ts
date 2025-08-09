@@ -5,12 +5,16 @@ import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
-    loginEmployeeUser(dto: EmployeeUserLogInDto): Promise<ApiResponseModel<EmployeeUsers>>;
+    login(dto: EmployeeUserLogInDto): Promise<ApiResponseModel<EmployeeUsers>>;
     verify(dto?: {
         email: string;
         hashCode: string;
     }): Promise<ApiResponseModel<EmployeeUsers>>;
-    refresh(employeeUserId: string, refreshToken: string): Promise<{
+    logout(userId: string): Promise<ApiResponseModel<any>>;
+    refreshToken(params: {
+        employeeUserId: string;
+        refresh_token: string;
+    }): Promise<{
         accessToken: string;
         refreshToken: string;
     }>;

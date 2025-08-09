@@ -9,7 +9,7 @@ export declare class AuthService {
     private jwtService;
     private readonly config;
     constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService, jwtService: JwtService, config: ConfigService);
-    getUserByCredentials({ userName, password }: {
+    login({ userName, password }: {
         userName: any;
         password: any;
     }): Promise<{
@@ -60,4 +60,9 @@ export declare class AuthService {
         accessToken: string;
         refreshToken: string;
     }>;
+    getNewAccessAndRefreshToken(refreshToken: string, employeeUserId: string): Promise<{
+        accessToken: string;
+        refreshToken: string;
+    }>;
+    logOut(employeeUserId: string): Promise<void>;
 }

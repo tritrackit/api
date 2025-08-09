@@ -38,7 +38,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, class_validator_1.IsNotEmpty)({
-        message: "Not allowed, email is required!"
+        message: "Not allowed, contact no is required!"
     }),
     __metadata("design:type", String)
 ], DefaultEmployeeUserDto.prototype, "contactNo", void 0);

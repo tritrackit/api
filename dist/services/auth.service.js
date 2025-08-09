@@ -29,7 +29,7 @@ let AuthService = class AuthService {
         this.jwtService = jwtService;
         this.config = config;
     }
-    async getUserByCredentials({ userName, password }) {
+    async login({ userName, password }) {
         try {
             const employeeUser = await this.employeeUserRepo.findOne({
                 where: {
@@ -121,6 +121,37 @@ let AuthService = class AuthService {
         employeeUser.refreshToken = refreshToken;
         await this.employeeUserRepo.save(employeeUser);
         return { accessToken, refreshToken };
+    }
+    async getNewAccessAndRefreshToken(refreshToken, employeeUserId) {
+        const employeeUser = await this.employeeUserRepo.findOne({
+            where: {
+                refreshToken,
+                employeeUserId,
+                active: true,
+            },
+            relations: {
+                role: true,
+            },
+        });
+        if (!employeeUser) {
+            throw new common_1.ForbiddenException("Invalid token");
+        }
+        return await this.issueTokens(employeeUser.employeeUserId, employeeUser.email);
+    }
+    async logOut(employeeUserId) {
+        const employeeUser = await this.employeeUserRepo.findOne({
+            where: {
+                employeeUserId,
+                active: true,
+            },
+            relations: {
+                role: true,
+            },
+        });
+        if (employeeUser) {
+            employeeUser.refreshToken = null;
+            await this.employeeUserRepo.save(employeeUser);
+        }
     }
 };
 AuthService = __decorate([

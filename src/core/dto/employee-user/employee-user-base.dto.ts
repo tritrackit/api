@@ -35,7 +35,7 @@ export class DefaultEmployeeUserDto {
 
   @ApiProperty()
   @IsNotEmpty({
-    message: "Not allowed, email is required!"
+    message: "Not allowed, contact no is required!"
   })
   contactNo: string;
 }
