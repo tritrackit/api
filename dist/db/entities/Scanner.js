@@ -75,11 +75,11 @@ __decorate([
     __metadata("design:type", EmployeeUsers_1.EmployeeUsers)
 ], Scanner.prototype, "updatedBy", void 0);
 Scanner = __decorate([
-    (0, typeorm_1.Index)("Scanner_Name_Active_idx", ["active", "name"], { unique: true }),
-    (0, typeorm_1.Index)("Scanner_Name_LocationId_Active_idx", ["active", "locationId", "name"], {
+    (0, typeorm_1.Index)("Scanner_ScannerCode_Active_idx", ["active", "scannerCode"], {
         unique: true,
     }),
-    (0, typeorm_1.Index)("Scanner_ScannerCode_Active_idx", ["active", "scannerCode"], {
+    (0, typeorm_1.Index)("Scanner_Name_Active_idx", ["active", "name"], { unique: true }),
+    (0, typeorm_1.Index)("Scanner_Name_LocationId_Active_idx", ["active", "locationId", "name"], {
         unique: true,
     }),
     (0, typeorm_1.Index)("Scanner_pkey", ["scannerId"], { unique: true }),
