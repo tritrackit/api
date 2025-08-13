@@ -227,12 +227,11 @@ BEGIN
         '[
           {"page":"Dashboard","view":true,"modify":true,"rights":[]},
           {"page":"Unit Tracker","view":true,"modify":true,"rights":[]},
-          {"page":"Unit Logs","view":true,"modify":true,"rights":[]},
           {"page":"Reports and Statistics","view":true,"modify":true,"rights":[]},
           {"page":"Employee Users","view":true,"modify":true,"rights":[]},
           {"page":"Roles","view":true,"modify":true,"rights":[]},
           {"page":"CBU","view":true,"modify":true,"rights":[]},
-          {"page":"Location","view":true,"modify":true,"rights":[]},
+          {"page":"Locations","view":true,"modify":true,"rights":[]},
           {"page":"Model","view":true,"modify":true,"rights":[]},
           {"page":"RFID Scanner","view":true,"modify":true,"rights":[]},
           {"page":"System Config","view":true,"modify":true,"rights":[]}
