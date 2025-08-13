@@ -33,7 +33,7 @@ export class CloudinaryService {
         format: result.format,
         width: result.width,
         height: result.height,
-      } as File;
+      } as any;
     } catch (e) {
       throw new InternalServerErrorException("Cloudinary upload failed");
     }
