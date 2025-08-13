@@ -40,12 +40,12 @@ __decorate([
     __metadata("design:type", String)
 ], File.prototype, "format", void 0);
 __decorate([
-    (0, typeorm_1.Column)("integer", { name: "Width", nullable: true }),
-    __metadata("design:type", Number)
+    (0, typeorm_1.Column)("bigint", { name: "Width", nullable: true }),
+    __metadata("design:type", String)
 ], File.prototype, "width", void 0);
 __decorate([
-    (0, typeorm_1.Column)("integer", { name: "Height", nullable: true }),
-    __metadata("design:type", Number)
+    (0, typeorm_1.Column)("bigint", { name: "Height", nullable: true }),
+    __metadata("design:type", String)
 ], File.prototype, "height", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => EmployeeUsers_1.EmployeeUsers, (employeeUsers) => employeeUsers.pictureFile),
@@ -57,7 +57,6 @@ __decorate([
 ], File.prototype, "models", void 0);
 File = __decorate([
     (0, typeorm_1.Index)("pk_files_901578250", ["fileId"], { unique: true }),
-    (0, typeorm_1.Index)("File_PublicId_idx", ["publicId"], { unique: true }),
     (0, typeorm_1.Entity)("File", { schema: "dbo" })
 ], File);
 exports.File = File;

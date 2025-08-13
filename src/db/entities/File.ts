@@ -9,7 +9,6 @@ import { EmployeeUsers } from "./EmployeeUsers";
 import { Model } from "./Model";
 
 @Index("pk_files_901578250", ["fileId"], { unique: true })
-@Index("File_PublicId_idx", ["publicId"], { unique: true })
 @Entity("File", { schema: "dbo" })
 export class File {
   @PrimaryGeneratedColumn({ type: "bigint", name: "FileId" })
@@ -30,11 +29,11 @@ export class File {
   @Column("character varying", { name: "Format", nullable: true })
   format: string | null;
 
-  @Column("integer", { name: "Width", nullable: true })
-  width: number | null;
+  @Column("bigint", { name: "Width", nullable: true })
+  width: string | null;
 
-  @Column("integer", { name: "Height", nullable: true })
-  height: number | null;
+  @Column("bigint", { name: "Height", nullable: true })
+  height: string | null;
 
   @OneToMany(() => EmployeeUsers, (employeeUsers) => employeeUsers.pictureFile)
   employeeUsers: EmployeeUsers[];

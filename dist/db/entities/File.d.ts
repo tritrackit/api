@@ -7,8 +7,8 @@ export declare class File {
     secureUrl: string;
     bytes: string | null;
     format: string | null;
-    width: number | null;
-    height: number | null;
+    width: string | null;
+    height: string | null;
     employeeUsers: EmployeeUsers[];
     models: Model[];
 }

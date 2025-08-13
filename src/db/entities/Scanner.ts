@@ -10,11 +10,11 @@ import { EmployeeUsers } from "./EmployeeUsers";
 import { Locations } from "./Locations";
 import { Status } from "./Status";
 
-@Index("Scanner_ScannerCode_Active_idx", ["active", "scannerCode"], {
+@Index("Scanner_Name_LocationId_Active_idx", ["active", "locationId", "name"], {
   unique: true,
 })
 @Index("Scanner_Name_Active_idx", ["active", "name"], { unique: true })
-@Index("Scanner_Name_LocationId_Active_idx", ["active", "locationId", "name"], {
+@Index("Scanner_ScannerCode_Active_idx", ["active", "scannerCode"], {
   unique: true,
 })
 @Index("Scanner_pkey", ["scannerId"], { unique: true })
