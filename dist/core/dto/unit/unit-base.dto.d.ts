@@ -4,5 +4,4 @@ export declare class DefaultUnitDto {
     color: string;
     description: string;
     modelId: string;
-    locationId: string;
 }

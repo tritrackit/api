@@ -30,16 +30,33 @@ import {
 } from "src/common/constant/employee-user-error.constant";
 import { Roles } from "src/db/entities/Roles";
 import { EmailService } from "./email.service";
+import { CloudinaryService } from "./cloudinary.service";
+import { File } from "src/db/entities/File";
+import { CacheService } from "./cache.service";
+import { CacheKeys } from "src/common/constant/cache.constant";
 
 @Injectable()
 export class EmployeeUserService {
   constructor(
     @InjectRepository(EmployeeUsers)
     private readonly employeeUserRepo: Repository<EmployeeUsers>,
-    private emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly cloudinaryService: CloudinaryService,
+    private readonly cacheService: CacheService
   ) {}
 
   async getPagination({ pageSize, pageIndex, order, columnDef }) {
+    const key = CacheKeys.employeeUsers.list(
+      pageIndex,
+      pageSize,
+      JSON.stringify(order),
+      JSON.stringify(columnDef)
+    );
+    const cached = this.cacheService.get<{
+      results: EmployeeUsers[];
+      total: number;
+    }>(key);
+    if (cached) return cached;
     const skip =
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
     const take = Number(pageSize);
@@ -90,7 +107,7 @@ export class EmployeeUserService {
       }),
     ]);
 
-    return {
+    const response = {
       results: results.map((x) => {
         delete x?.password;
         delete x?.refreshToken;
@@ -102,9 +119,15 @@ export class EmployeeUserService {
       }),
       total,
     };
+    this.cacheService.set(key, response);
+    return response;
   }
 
   async getByCode(employeeUserCode) {
+    const key = CacheKeys.employeeUsers.byCode(employeeUserCode);
+    const cached = this.cacheService.get<EmployeeUsers>(key);
+    if (cached) return cached;
+
     const res = await this.employeeUserRepo.findOne({
       where: {
         employeeUserCode,
@@ -112,22 +135,32 @@ export class EmployeeUserService {
       },
       relations: {
         role: true,
+        createdBy: true,
+        updatedBy: true,
+        pictureFile: true,
       },
     });
 
     if (!res) {
       throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
     }
-    delete res?.password;
-    delete res?.refreshToken;
-    delete res?.createdBy?.password;
-    delete res?.createdBy?.refreshToken;
-    delete res?.updatedBy?.password;
-    delete res?.updatedBy?.refreshToken;
-    return res;
+    this.cacheService.set(key, res);
+    const response = {
+      ...res,
+    }
+    delete response?.password;
+    delete response?.refreshToken;
+    delete response?.createdBy?.password;
+    delete response?.createdBy?.refreshToken;
+    delete response?.updatedBy?.password;
+    delete response?.updatedBy?.refreshToken;
+    return response;
   }
 
   async getById(employeeUserId) {
+    const key = CacheKeys.employeeUsers.byId(employeeUserId);
+    const cached = this.cacheService.get<EmployeeUsers>(key);
+    if (cached) return cached;
     const res = await this.employeeUserRepo.findOne({
       where: {
         employeeUserId,
@@ -135,19 +168,26 @@ export class EmployeeUserService {
       },
       relations: {
         role: true,
+        createdBy: true,
+        updatedBy: true,
+        pictureFile: true,
       },
     });
 
     if (!res) {
       throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
     }
-    delete res?.password;
-    delete res?.refreshToken;
-    delete res?.createdBy?.password;
-    delete res?.createdBy?.refreshToken;
-    delete res?.updatedBy?.password;
-    delete res?.updatedBy?.refreshToken;
-    return res;
+    this.cacheService.set(key, res);
+    const response = {
+      ...res,
+    }
+    delete response?.password;
+    delete response?.refreshToken;
+    delete response?.createdBy?.password;
+    delete response?.createdBy?.refreshToken;
+    delete response?.updatedBy?.password;
+    delete response?.updatedBy?.refreshToken;
+    return response;
   }
 
   async create(dto: CreateEmployeeUserDto, createdByUserId: string) {
@@ -165,25 +205,45 @@ export class EmployeeUserService {
 
           employeeUser.invitationCode = generateOTP();
           if (dto.roleCode) {
-            const access = await entityManager.findOne(Roles, {
-              where: {
-                roleCode: dto.roleCode,
-                active: true,
-              },
-            });
+            const roleKey = CacheKeys.roles.byCode(dto.roleCode);
+            let role = this.cacheService.get<Roles>(roleKey);
+            if (!role) {
+              role = await entityManager.findOne(Roles, {
+                where: {
+                  roleCode: dto.roleCode,
+                  active: true,
+                },
+                relations: {
+                  createdBy: true,
+                  updatedBy: true,
+                },
+              });
+              this.cacheService.set(roleKey, role);
+            }
 
-            if (!access) {
+            if (!role) {
               throw Error(ROLE_ERROR_NOT_FOUND);
             }
-            employeeUser.role = access;
+            employeeUser.role = role;
           }
 
-          const createdBy = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserId: createdByUserId,
-              active: true,
-            },
-          });
+          const createdByKey = CacheKeys.employeeUsers.byId(createdByUserId);
+          let createdBy = this.cacheService.get<EmployeeUsers>(createdByKey);
+          if (!createdBy) {
+            createdBy = await entityManager.findOne(EmployeeUsers, {
+              where: {
+                employeeUserId: createdByUserId,
+                active: true,
+              },
+              relations: {
+                role: true,
+                createdBy: true,
+                updatedBy: true,
+                pictureFile: true,
+              },
+            });
+            this.cacheService.set(createdByKey, createdBy);
+          }
           if (!createdBy) {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
           }
@@ -216,6 +276,7 @@ export class EmployeeUserService {
           delete employeeUser?.createdBy?.refreshToken;
           delete employeeUser?.updatedBy?.password;
           delete employeeUser?.updatedBy?.refreshToken;
+          this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
           return employeeUser;
         } catch (ex) {
           if (
@@ -245,13 +306,24 @@ export class EmployeeUserService {
   async resendInvitation(employeeUserCode: string) {
     return await this.employeeUserRepo.manager.transaction(
       async (entityManager) => {
-        let employeeUser = await entityManager.findOne(EmployeeUsers, {
-          where: {
-            employeeUserCode,
-            active: true,
-          },
-          relations: {},
-        });
+        const employeeUserKey =
+          CacheKeys.employeeUsers.byCode(employeeUserCode);
+        let employeeUser =
+          this.cacheService.get<EmployeeUsers>(employeeUserKey);
+        if (!employeeUser) {
+          employeeUser = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserCode,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+        }
         if (!employeeUser) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
@@ -276,6 +348,13 @@ export class EmployeeUserService {
         delete employeeUser?.createdBy?.refreshToken;
         delete employeeUser?.updatedBy?.password;
         delete employeeUser?.updatedBy?.refreshToken;
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+        );
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+        );
+        this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
         return employeeUser;
       }
     );
@@ -287,14 +366,23 @@ export class EmployeeUserService {
   ) {
     return await this.employeeUserRepo.manager.transaction(
       async (entityManager) => {
-        let employeeUser = await entityManager.findOne(EmployeeUsers, {
-          where: {
-            employeeUserId,
-            active: true,
-          },
-          relations: {},
-        });
-
+        const employeeUserKey = CacheKeys.employeeUsers.byId(employeeUserId);
+        let employeeUser =
+          this.cacheService.get<EmployeeUsers>(employeeUserKey);
+        if (!employeeUser) {
+          employeeUser = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserId,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+        }
         if (!employeeUser) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
@@ -307,6 +395,27 @@ export class EmployeeUserService {
 
         employeeUser.updatedBy = employeeUser;
         employeeUser.lastUpdatedAt = await getDate();
+        let uploaded: File | undefined;
+        if (dto.pictureFile) {
+          if (employeeUser.pictureFile) {
+            try {
+              await this.cloudinaryService.deleteByPublicId(
+                employeeUser.pictureFile?.publicId
+              );
+            } catch (ex) {
+              console.log(ex);
+            }
+          }
+          uploaded = await this.cloudinaryService.uploadDataUri(
+            dto.pictureFile.data,
+            dto.pictureFile.fileName,
+            "model"
+          );
+        }
+        if (uploaded) {
+          uploaded.fileId = employeeUser.pictureFile?.fileId;
+          employeeUser.pictureFile = await entityManager.save(File, uploaded);
+        }
         employeeUser = await entityManager.save(EmployeeUsers, employeeUser);
 
         employeeUser = await entityManager.findOne(EmployeeUsers, {
@@ -322,6 +431,13 @@ export class EmployeeUserService {
         delete employeeUser?.createdBy?.refreshToken;
         delete employeeUser?.updatedBy?.password;
         delete employeeUser?.updatedBy?.refreshToken;
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+        );
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+        );
+        this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
         return employeeUser;
       }
     );
@@ -335,13 +451,24 @@ export class EmployeeUserService {
     return await this.employeeUserRepo.manager.transaction(
       async (entityManager) => {
         try {
-          let employeeUser = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserCode,
-              active: true,
-            },
-            relations: {},
-          });
+          const employeeUserKey =
+            CacheKeys.employeeUsers.byCode(employeeUserCode);
+          let employeeUser =
+            this.cacheService.get<EmployeeUsers>(employeeUserKey);
+          if (!employeeUser) {
+            employeeUser = await entityManager.findOne(EmployeeUsers, {
+              where: {
+                employeeUserCode,
+                active: true,
+              },
+              relations: {
+                role: true,
+                createdBy: true,
+                updatedBy: true,
+                pictureFile: true,
+              },
+            });
+          }
 
           if (!employeeUser) {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
@@ -353,12 +480,21 @@ export class EmployeeUserService {
           employeeUser.firstName = dto.firstName;
           employeeUser.lastName = dto.lastName;
           if (dto.roleCode) {
-            const role = await entityManager.findOne(Roles, {
-              where: {
-                roleCode: dto.roleCode,
-                active: true,
-              },
-            });
+            const roleKey = CacheKeys.roles.byCode(dto.roleCode);
+            let role = this.cacheService.get<Roles>(roleKey);
+            if (!role) {
+              role = await entityManager.findOne(Roles, {
+                where: {
+                  roleCode: dto.roleCode,
+                  active: true,
+                },
+                relations: {
+                  createdBy: true,
+                  updatedBy: true,
+                },
+              });
+              this.cacheService.set(roleKey, role);
+            }
 
             if (!role) {
               throw Error(ROLE_ERROR_NOT_FOUND);
@@ -367,12 +503,23 @@ export class EmployeeUserService {
           }
           employeeUser.accessGranted = true;
           employeeUser.lastUpdatedAt = await getDate();
-          const updatedBy = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserId: updatedByUserId,
-              active: true,
-            },
-          });
+          const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
+          let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
+          if (!updatedBy) {
+            updatedBy = await entityManager.findOne(EmployeeUsers, {
+              where: {
+                employeeUserId: updatedByUserId,
+                active: true,
+              },
+              relations: {
+                role: true,
+                createdBy: true,
+                updatedBy: true,
+                pictureFile: true,
+              },
+            });
+            this.cacheService.set(updatedByKey, updatedBy);
+          }
           if (!updatedBy) {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
           }
@@ -391,6 +538,13 @@ export class EmployeeUserService {
           delete employeeUser?.createdBy?.refreshToken;
           delete employeeUser?.updatedBy?.password;
           delete employeeUser?.updatedBy?.refreshToken;
+          this.cacheService.del(
+            CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+          );
+          this.cacheService.del(
+            CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+          );
+          this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
           return employeeUser;
         } catch (ex) {
           if (ex.message.includes("duplicate")) {
@@ -409,13 +563,24 @@ export class EmployeeUserService {
   async delete(employeeUserCode, updatedByUserId) {
     return await this.employeeUserRepo.manager.transaction(
       async (entityManager) => {
-        let employeeUser = await entityManager.findOne(EmployeeUsers, {
-          where: {
-            employeeUserCode,
-            active: true,
-          },
-          relations: {},
-        });
+        const employeeUserKey =
+          CacheKeys.employeeUsers.byCode(employeeUserCode);
+        let employeeUser =
+          this.cacheService.get<EmployeeUsers>(employeeUserKey);
+        if (!employeeUser) {
+          employeeUser = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserCode,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+        }
 
         if (!employeeUser) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
@@ -423,12 +588,23 @@ export class EmployeeUserService {
 
         employeeUser.active = false;
         employeeUser.lastUpdatedAt = await getDate();
-        const updatedBy = await entityManager.findOne(EmployeeUsers, {
-          where: {
-            employeeUserId: updatedByUserId,
-            active: true,
-          },
-        });
+        const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
+        let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
+        if (!updatedBy) {
+          updatedBy = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserId: updatedByUserId,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+          this.cacheService.set(updatedByKey, updatedBy);
+        }
         if (!updatedBy) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
@@ -440,6 +616,78 @@ export class EmployeeUserService {
         delete employeeUser?.createdBy?.refreshToken;
         delete employeeUser?.updatedBy?.password;
         delete employeeUser?.updatedBy?.refreshToken;
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+        );
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+        );
+        this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
+        return employeeUser;
+      }
+    );
+  }
+
+  async updatePassword(employeeUserCode, password, updatedByUserId) {
+    return await this.employeeUserRepo.manager.transaction(
+      async (entityManager) => {
+        const employeeUserKey =
+          CacheKeys.employeeUsers.byCode(employeeUserCode);
+        let employeeUser =
+          this.cacheService.get<EmployeeUsers>(employeeUserKey);
+        if (!employeeUser) {
+          employeeUser = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserCode,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+        }
+
+        if (!employeeUser) {
+          throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
+        }
+
+        employeeUser.lastUpdatedAt = await getDate();
+        employeeUser.password = await hash(password);
+        const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
+        let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
+        if (!updatedBy) {
+          updatedBy = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserId: updatedByUserId,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+          this.cacheService.set(updatedByKey, updatedBy);
+        }
+        if (!updatedBy) {
+          throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
+        }
+        employeeUser.updatedBy = updatedBy;
+        employeeUser = await entityManager.save(EmployeeUsers, employeeUser);
+        delete employeeUser.createdBy;
+        delete employeeUser.updatedBy;
+        delete employeeUser.password;
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+        );
+        this.cacheService.del(
+          CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+        );
+        this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
         return employeeUser;
       }
     );

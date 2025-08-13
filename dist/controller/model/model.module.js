@@ -13,13 +13,14 @@ const typeorm_1 = require("@nestjs/typeorm");
 const Model_1 = require("../../db/entities/Model");
 const model_service_1 = require("../../services/model.service");
 const firebase_provider_module_1 = require("../../core/provider/firebase/firebase-provider.module");
+const cloudinary_service_1 = require("../../services/cloudinary.service");
 let ModelModule = class ModelModule {
 };
 ModelModule = __decorate([
     (0, common_1.Module)({
         imports: [firebase_provider_module_1.FirebaseProviderModule, typeorm_1.TypeOrmModule.forFeature([Model_1.Model])],
         controllers: [model_controller_1.ModelController],
-        providers: [model_service_1.ModelService],
+        providers: [model_service_1.ModelService, cloudinary_service_1.CloudinaryService],
         exports: [model_service_1.ModelService],
     })
 ], ModelModule);

@@ -6,7 +6,7 @@ import { LocationsService } from "src/services/locations.service";
 export declare class LocationsController {
     private readonly locationsService;
     constructor(locationsService: LocationsService);
-    getById(locationsId: string): Promise<ApiResponseModel<Locations>>;
+    getById(locationId: string): Promise<ApiResponseModel<Locations>>;
     getPaginated(params?: {
         pageSize: string;
         pageIndex: string;
@@ -17,6 +17,6 @@ export declare class LocationsController {
         total: number;
     }>>;
     create(accessDto: CreateLocationsDto, userId: string): Promise<ApiResponseModel<Locations>>;
-    update(locationsId: string, dto: UpdateLocationsDto, userId: string): Promise<ApiResponseModel<Locations>>;
-    delete(locationsId: string, userId: string): Promise<ApiResponseModel<Locations>>;
+    update(locationId: string, dto: UpdateLocationsDto, userId: string): Promise<ApiResponseModel<Locations>>;
+    delete(locationId: string, userId: string): Promise<ApiResponseModel<Locations>>;
 }

@@ -5,6 +5,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
@@ -20,8 +23,17 @@ const model_module_1 = require("./controller/model/model.module");
 const scanner_module_1 = require("./controller/scanner/scanner.module");
 const locations_module_1 = require("./controller/locations/locations.module");
 const units_module_1 = require("./controller/unit/units.module");
+const cache_service_1 = require("./services/cache.service");
+const cache_module_1 = require("./core/cache/cache.module");
 const envFilePath = (0, utils_1.getEnvPath)(`${__dirname}/envs`);
 let AppModule = class AppModule {
+    constructor(cache) {
+        this.cache = cache;
+    }
+    onApplicationBootstrap() {
+        if (process.env.NODE_ENV !== "production") {
+        }
+    }
 };
 AppModule = __decorate([
     (0, common_1.Module)({
@@ -37,11 +49,13 @@ AppModule = __decorate([
             model_module_1.ModelModule,
             scanner_module_1.ScannerModule,
             locations_module_1.LocationsModule,
-            units_module_1.UnitsModule
+            units_module_1.UnitsModule,
+            cache_module_1.CacheModule
         ],
-        providers: [app_service_1.AppService],
+        providers: [app_service_1.AppService, cache_service_1.CacheService],
         controllers: [],
-    })
+    }),
+    __metadata("design:paramtypes", [cache_service_1.CacheService])
 ], AppModule);
 exports.AppModule = AppModule;
 //# sourceMappingURL=app.module.js.map

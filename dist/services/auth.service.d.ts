@@ -3,12 +3,14 @@ import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { EmailService } from "./email.service";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
+import { CacheService } from "./cache.service";
 export declare class AuthService {
     private readonly employeeUserRepo;
     private emailService;
     private jwtService;
     private readonly config;
-    constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService, jwtService: JwtService, config: ConfigService);
+    private readonly cacheService;
+    constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService, jwtService: JwtService, config: ConfigService, cacheService: CacheService);
     login({ userName, password }: {
         userName: any;
         password: any;
@@ -32,6 +34,7 @@ export declare class AuthService {
         employeeUserActivityLogs: import("../db/entities/EmployeeUserActivityLogs").EmployeeUserActivityLogs[];
         createdBy: EmployeeUsers;
         employeeUsers: EmployeeUsers[];
+        pictureFile: import("../db/entities/File").File;
         role: import("../db/entities/Roles").Roles;
         updatedBy: EmployeeUsers;
         employeeUsers2: EmployeeUsers[];

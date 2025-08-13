@@ -8,7 +8,7 @@ import { UnitLogs } from "src/db/entities/UnitLogs";
 export declare class UnitsController {
     private readonly unitsService;
     constructor(unitsService: UnitsService);
-    getById(unitId: string): Promise<ApiResponseModel<Units>>;
+    getByCode(unitCode: string): Promise<ApiResponseModel<Units>>;
     getPaginated(params?: {
         pageSize: string;
         pageIndex: string;
@@ -21,5 +21,5 @@ export declare class UnitsController {
     create(accessDto: CreateUnitDto, userId: string): Promise<ApiResponseModel<Units>>;
     update(unitId: string, dto: UpdateUnitDto, userId: string): Promise<ApiResponseModel<Units>>;
     delete(unitId: string, userId: string): Promise<ApiResponseModel<Units>>;
-    unitLogs(dto: LogsDto): Promise<ApiResponseModel<UnitLogs[]>>;
+    unitLogs(dto: LogsDto, req: any): Promise<ApiResponseModel<UnitLogs[]>>;
 }

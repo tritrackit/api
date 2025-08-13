@@ -10,13 +10,6 @@ import {
 
 export class ScannerLogDto {
   @ApiProperty({
-    type: String,
-    description: "The scanner Code",
-  })
-  @IsNotEmpty()
-  scannerCode: string;
-
-  @ApiProperty({
     type: Date,
     description: "The timestamp of the log",
   })
@@ -39,7 +32,6 @@ export class LogsDto {
     example: [
       {
         rfid: "ABC1234567",
-        scannerCode: "123456",
         timestamp: "2025-08-06T14:00:00Z",
       },
     ],

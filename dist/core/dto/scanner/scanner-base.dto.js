@@ -41,6 +41,11 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
+], DefaultScannerDto.prototype, "statusId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
 ], DefaultScannerDto.prototype, "locationId", void 0);
 exports.DefaultScannerDto = DefaultScannerDto;
 //# sourceMappingURL=scanner-base.dto.js.map

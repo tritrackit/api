@@ -14,15 +14,30 @@ import { UpdateLocationsDto } from "src/core/dto/locations/locations.update.dto"
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Repository } from "typeorm";
 import { Status } from "src/db/entities/Status";
+import { CacheKeys } from "src/common/constant/cache.constant";
+import { CacheService } from "./cache.service";
 
 @Injectable()
 export class LocationsService {
   constructor(
     @InjectRepository(Locations)
-    private readonly locationsRepo: Repository<Locations>
+    private readonly locationsRepo: Repository<Locations>,
+    private readonly cacheService: CacheService
   ) {}
 
   async getPagination({ pageSize, pageIndex, order, columnDef }) {
+    const key = CacheKeys.locations.list(
+      pageIndex,
+      pageSize,
+      JSON.stringify(order),
+      JSON.stringify(columnDef)
+    );
+    const cached = this.cacheService.get<{
+      results: Locations[];
+      total: number;
+    }>(key);
+    if (cached) return cached;
+
     const skip =
       Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
     const take = Number(pageSize);
@@ -49,7 +64,7 @@ export class LocationsService {
         },
       }),
     ]);
-    return {
+    const response = {
       results: results.map((x) => {
         delete x?.createdBy?.password;
         delete x?.createdBy?.refreshToken;
@@ -59,9 +74,15 @@ export class LocationsService {
       }),
       total,
     };
+    this.cacheService.set(key, response);
+    return response;
   }
 
   async getById(locationId) {
+    const key = CacheKeys.locations.byId(locationId);
+    const cached = this.cacheService.get<Locations>(key);
+    if (cached) return cached;
+
     const result = await this.locationsRepo.findOne({
       where: {
         locationId,
@@ -83,6 +104,7 @@ export class LocationsService {
     delete result?.createdBy?.refreshToken;
     delete result?.updatedBy?.password;
     delete result?.updatedBy?.refreshToken;
+    this.cacheService.set(key, result);
     return result;
   }
 
@@ -95,12 +117,24 @@ export class LocationsService {
           locations.name = dto.name;
           locations.dateCreated = await getDate();
 
-          const createdBy = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserId: createdByUserId,
-              active: true,
-            },
-          });
+          const createdByKey = CacheKeys.employeeUsers.byId(createdByUserId);
+          let createdBy = this.cacheService.get<EmployeeUsers>(createdByKey);
+          if (!createdBy) {
+            createdBy = await entityManager.findOne(EmployeeUsers, {
+              where: {
+                employeeUserId: createdByUserId,
+                active: true,
+              },
+              relations: {
+                role: true,
+                createdBy: true,
+                updatedBy: true,
+                pictureFile: true,
+              },
+            });
+            this.cacheService.set(createdByKey, createdBy);
+          }
+
           if (!createdBy) {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
           }
@@ -110,6 +144,8 @@ export class LocationsService {
           delete locations?.createdBy?.refreshToken;
           delete locations?.updatedBy?.password;
           delete locations?.updatedBy?.refreshToken;
+          // Invalidate caches
+          this.cacheService.delByPrefix(CacheKeys.locations.prefix);
           return locations;
         }
       );
@@ -131,44 +167,59 @@ export class LocationsService {
     try {
       return await this.locationsRepo.manager.transaction(
         async (entityManager) => {
-          let locations = await entityManager.findOne(Locations, {
-            where: {
-              locationId,
-              active: true,
-            },
-          });
-          if (!locations) {
+          const locationKey = CacheKeys.locations.byId(locationId);
+          let location = this.cacheService.get<Locations>(locationKey);
+          if (!location) {
+            location = await entityManager.findOne(Locations, {
+              where: {
+                locationId,
+                active: true,
+              },
+              relations: {
+                createdBy: true,
+                updatedBy: true,
+              },
+            });
+          }
+
+          if (!location) {
             throw Error(LOCATIONS_ERROR_NOT_FOUND);
           }
 
-          locations.locationCode = dto.locationCode;
-          locations.name = dto.name;
-          locations.lastUpdatedAt = await getDate();
-          const updatedBy = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserId: updatedByUserId,
-              active: true,
-            },
-          });
+          location.locationCode = dto.locationCode;
+          location.name = dto.name;
+          location.lastUpdatedAt = await getDate();
+          const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
+          let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
+          if (!updatedBy) {
+            updatedBy = await entityManager.findOne(EmployeeUsers, {
+              where: {
+                employeeUserId: updatedByUserId,
+                active: true,
+              },
+              relations: {
+                role: true,
+                createdBy: true,
+                updatedBy: true,
+                pictureFile: true,
+              },
+            });
+            this.cacheService.set(updatedByKey, updatedBy);
+          }
           if (!updatedBy) {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
           }
-          locations.updatedBy = updatedBy;
+          location.updatedBy = updatedBy;
 
-          locations = await entityManager.save(Locations, locations);
-          if (locations?.createdBy?.password) {
-            delete locations.createdBy.password;
-          }
-          if (locations?.updatedBy?.password) {
-            delete locations.updatedBy.password;
-          }
-          if (locations?.createdBy?.refreshToken) {
-            delete locations.createdBy.refreshToken;
-          }
-          if (locations?.updatedBy?.refreshToken) {
-            delete locations.updatedBy.refreshToken;
-          }
-          return locations;
+          location = await entityManager.save(Locations, location);
+          delete location?.createdBy?.password;
+          delete location?.updatedBy?.password;
+          delete location?.createdBy?.refreshToken;
+          delete location?.updatedBy?.refreshToken;
+          // Invalidate caches
+          this.cacheService.del(CacheKeys.locations.byId(location?.locationId));
+          this.cacheService.delByPrefix(CacheKeys.locations.prefix);
+          return location;
         }
       );
     } catch (ex) {
@@ -188,29 +239,51 @@ export class LocationsService {
   async delete(locationId, updatedByUserId: string) {
     return await this.locationsRepo.manager.transaction(
       async (entityManager) => {
-        const locations = await entityManager.findOne(Locations, {
-          where: {
-            locationId,
-            active: true,
-          },
-        });
-        if (!locations) {
+        const locationKey = CacheKeys.locations.byId(locationId);
+        let location = this.cacheService.get<Locations>(locationKey);
+        if (!location) {
+          location = await entityManager.findOne(Locations, {
+            where: {
+              locationId,
+              active: true,
+            },
+            relations: {
+              createdBy: true,
+              updatedBy: true,
+            },
+          });
+        }
+        if (!location) {
           throw Error(LOCATIONS_ERROR_NOT_FOUND);
         }
-        locations.active = false;
-        locations.lastUpdatedAt = await getDate();
+        location.active = false;
+        location.lastUpdatedAt = await getDate();
 
-        const updatedBy = await entityManager.findOne(EmployeeUsers, {
-          where: {
-            employeeUserId: updatedByUserId,
-            active: true,
-          },
-        });
+        const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
+        let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
+        if (!updatedBy) {
+          updatedBy = await entityManager.findOne(EmployeeUsers, {
+            where: {
+              employeeUserId: updatedByUserId,
+              active: true,
+            },
+            relations: {
+              role: true,
+              createdBy: true,
+              updatedBy: true,
+              pictureFile: true,
+            },
+          });
+          this.cacheService.set(updatedByKey, updatedBy);
+        }
         if (!updatedBy) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
-        locations.updatedBy = updatedBy;
-        return await entityManager.save(Locations, locations);
+        location.updatedBy = updatedBy;
+        // Invalidate caches
+        this.cacheService.del(CacheKeys.locations.byId(location?.locationId));
+        this.cacheService.delByPrefix(CacheKeys.locations.prefix);
+        return await entityManager.save(Locations, location);
       }
     );
   }

@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from "typeorm";
 import { EmployeeUserActivityLogs } from "./EmployeeUserActivityLogs";
+import { File } from "./File";
 import { Roles } from "./Roles";
 import { Locations } from "./Locations";
 import { Model } from "./Model";
@@ -15,10 +16,10 @@ import { Scanner } from "./Scanner";
 import { UnitLogs } from "./UnitLogs";
 import { Units } from "./Units";
 
-@Index("EmployeeUsers_Email_Active_idx", ["active", "email"], { unique: true })
 @Index("EmployeeUsers_UserName_Active_idx", ["active", "userName"], {
   unique: true,
 })
+@Index("EmployeeUsers_Email_Active_idx", ["active", "email"], { unique: true })
 @Index("EmployeeUsers_pkey", ["employeeUserId"], { unique: true })
 @Entity("EmployeeUsers", { schema: "dbo" })
 export class EmployeeUsers {
@@ -85,6 +86,10 @@ export class EmployeeUsers {
 
   @OneToMany(() => EmployeeUsers, (employeeUsers) => employeeUsers.createdBy)
   employeeUsers: EmployeeUsers[];
+
+  @ManyToOne(() => File, (file) => file.employeeUsers)
+  @JoinColumn([{ name: "PictureFileId", referencedColumnName: "fileId" }])
+  pictureFile: File;
 
   @ManyToOne(() => Roles, (roles) => roles.employeeUsers)
   @JoinColumn([{ name: "RoleId", referencedColumnName: "roleId" }])

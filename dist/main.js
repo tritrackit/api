@@ -50,6 +50,7 @@ async function bootstrap() {
         .setDescription("A documentation for tritrackit-api")
         .setVersion("1.0")
         .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "JWT", in: "header" }, "jwt")
+        .addApiKey({ type: "apiKey", in: "header", name: "X-API-Key" }, "apiKey")
         .build();
     app.use(bodyParser.json({ limit: "50mb" }));
     app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));

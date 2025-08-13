@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModelService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const path_1 = require("path");
 const model_constant_1 = require("../common/constant/model.constant");
 const utils_1 = require("../common/utils/utils");
 const firebase_provider_1 = require("../core/provider/firebase/firebase-provider");
@@ -23,16 +22,24 @@ const Model_1 = require("../db/entities/Model");
 const Units_1 = require("../db/entities/Units");
 const typeorm_2 = require("typeorm");
 const File_1 = require("../db/entities/File");
-const uuid_1 = require("uuid");
 const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
 const employee_user_error_constant_1 = require("../common/constant/employee-user-error.constant");
 const utils_2 = require("../common/utils/utils");
+const cloudinary_service_1 = require("./cloudinary.service");
+const cache_constant_1 = require("../common/constant/cache.constant");
+const cache_service_1 = require("./cache.service");
 let ModelService = class ModelService {
-    constructor(firebaseProvider, modelRepo) {
+    constructor(firebaseProvider, modelRepo, cloudinaryService, cacheService) {
         this.firebaseProvider = firebaseProvider;
         this.modelRepo = modelRepo;
+        this.cloudinaryService = cloudinaryService;
+        this.cacheService = cacheService;
     }
     async getPagination({ pageSize, pageIndex, order, keywords }) {
+        const key = cache_constant_1.CacheKeys.model.list(pageIndex, pageSize, JSON.stringify(order), JSON.stringify(keywords));
+        const cached = this.cacheService.get(key);
+        if (cached)
+            return cached;
         let skip = 0;
         let take = Number(pageSize);
         if (Number(pageIndex) > 0) {
@@ -96,14 +103,14 @@ let ModelService = class ModelService {
             SELECT c."ModelId" as "modelId",
             COUNT(p."UnitId")
             FROM dbo."Model" c
-            LEFT JOIN dbo."Unit" p ON c."ModelId" = p."ModelId"
+            LEFT JOIN dbo."Units" p ON c."ModelId" = p."ModelId"
             WHERE p."Active" = true AND c."ModelId" IN(${modelIds.join(",")})
             GROUP BY c."ModelId"`)
                     : [];
                 return queryRes;
             }),
         ]);
-        return {
+        const response = {
             results: results.map((x) => {
                 var _a, _b, _c, _d;
                 x["unitCount"] = models.some((pc) => x.modelId.toString() === pc.modelId.toString())
@@ -118,33 +125,34 @@ let ModelService = class ModelService {
             }),
             total,
         };
+        this.cacheService.set(key, response);
+        return response;
     }
     async getById(modelId) {
         var _a, _b, _c, _d;
-        const result = await this.modelRepo.findOne({
-            where: {
-                modelId,
-                active: true,
-            },
-            relations: {
-                thumbnailFile: true,
-            },
-        });
+        const key = cache_constant_1.CacheKeys.model.byId(modelId);
+        const cached = this.cacheService.get(key);
+        if (cached)
+            return cached;
+        const [result, unitCount] = await Promise.all([
+            this.modelRepo.findOne({
+                where: { modelId, active: true },
+                relations: { thumbnailFile: true },
+            }),
+            this.modelRepo.manager.count(Units_1.Units, {
+                where: { model: { modelId } },
+            }),
+        ]);
         if (!result) {
             throw Error(model_constant_1.MODEL_ERROR_NOT_FOUND);
         }
-        const unitCount = await this.modelRepo.manager.count(Units_1.Units, {
-            where: {
-                model: {
-                    modelId,
-                },
-            },
-        });
+        result.unitCount = unitCount;
         (_a = result === null || result === void 0 ? void 0 : result.createdBy) === null || _a === void 0 ? true : delete _a.password;
         (_b = result === null || result === void 0 ? void 0 : result.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
         (_c = result === null || result === void 0 ? void 0 : result.updatedBy) === null || _c === void 0 ? true : delete _c.password;
         (_d = result === null || result === void 0 ? void 0 : result.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
-        return Object.assign(Object.assign({}, result), { unitCount });
+        this.cacheService.set(key, result);
+        return result;
     }
     async create(dto, createdByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
@@ -155,33 +163,34 @@ let ModelService = class ModelService {
                 model.description = dto.description;
                 model.sequenceId = dto.sequenceId;
                 model.dateCreated = await (0, utils_2.getDate)();
-                const createdBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: createdByUserId,
-                        active: true,
-                    },
-                });
+                const createdByKey = cache_constant_1.CacheKeys.employeeUsers.byId(createdByUserId);
+                let createdBy = this.cacheService.get(createdByKey);
+                if (!createdBy) {
+                    createdBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                        where: {
+                            employeeUserId: createdByUserId,
+                            active: true,
+                        },
+                        relations: {
+                            role: true,
+                            createdBy: true,
+                            updatedBy: true,
+                            pictureFile: true,
+                        },
+                    });
+                    this.cacheService.set(createdByKey, createdBy);
+                }
                 if (!createdBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
                 model.createdBy = createdBy;
                 model = await entityManager.save(Model_1.Model, model);
+                let uploaded;
                 if (dto.thumbnailFile) {
-                    const bucket = this.firebaseProvider.app.storage().bucket();
-                    model.thumbnailFile = new File_1.File();
-                    const newGUID = (0, uuid_1.v4)();
-                    const bucketFile = bucket.file(`model/${newGUID}${(0, path_1.extname)(dto.thumbnailFile.fileName)}`);
-                    const img = Buffer.from(dto.thumbnailFile.data, "base64");
-                    await bucketFile.save(img).then(async () => {
-                        const url = await bucketFile.getSignedUrl({
-                            action: "read",
-                            expires: "03-09-2500",
-                        });
-                        model.thumbnailFile.guid = newGUID;
-                        model.thumbnailFile.fileName = dto.thumbnailFile.fileName;
-                        model.thumbnailFile.url = url[0];
-                        model.thumbnailFile = await entityManager.save(File_1.File, model.thumbnailFile);
-                    });
+                    uploaded = await this.cloudinaryService.uploadDataUri(dto.thumbnailFile.data, dto.thumbnailFile.fileName, "model");
+                }
+                if (uploaded) {
+                    model.thumbnailFile = await entityManager.save(File_1.File, uploaded);
                 }
                 model = await entityManager.save(Model_1.Model, model);
                 model = await entityManager.findOne(Model_1.Model, {
@@ -196,6 +205,7 @@ let ModelService = class ModelService {
                 (_b = model === null || model === void 0 ? void 0 : model.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
                 (_c = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _c === void 0 ? true : delete _c.password;
                 (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
                 return model;
             }
             catch (ex) {
@@ -215,17 +225,21 @@ let ModelService = class ModelService {
     }
     async update(modelId, dto, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e, _f;
             try {
-                let model = await entityManager.findOne(Model_1.Model, {
-                    where: {
-                        modelId,
-                        active: true,
-                    },
-                    relations: {
-                        thumbnailFile: true,
-                    },
-                });
+                const key = cache_constant_1.CacheKeys.model.byId(modelId);
+                let model = this.cacheService.get(key);
+                if (!model) {
+                    model = await entityManager.findOne(Model_1.Model, {
+                        where: {
+                            modelId,
+                            active: true,
+                        },
+                        relations: {
+                            thumbnailFile: true,
+                        },
+                    });
+                }
                 if (!model) {
                     throw Error(model_constant_1.MODEL_ERROR_NOT_FOUND);
                 }
@@ -233,58 +247,39 @@ let ModelService = class ModelService {
                 model.description = dto.description;
                 model.sequenceId = dto.sequenceId;
                 model.lastUpdatedAt = await (0, utils_2.getDate)();
+                let uploaded;
                 if (dto.thumbnailFile) {
-                    const newGUID = (0, uuid_1.v4)();
-                    const bucket = this.firebaseProvider.app.storage().bucket();
                     if (model.thumbnailFile) {
                         try {
-                            const deleteFile = bucket.file(`model/${model.thumbnailFile.guid}${(0, path_1.extname)(model.thumbnailFile.fileName)}`);
-                            const exists = await deleteFile.exists();
-                            if (exists[0]) {
-                                deleteFile.delete();
-                            }
+                            await this.cloudinaryService.deleteByPublicId((_a = model.thumbnailFile) === null || _a === void 0 ? void 0 : _a.publicId);
                         }
                         catch (ex) {
                             console.log(ex);
                         }
-                        const file = model.thumbnailFile;
-                        file.guid = newGUID;
-                        file.fileName = dto.thumbnailFile.fileName;
-                        const bucketFile = bucket.file(`model/${newGUID}${(0, path_1.extname)(dto.thumbnailFile.fileName)}`);
-                        const img = Buffer.from(dto.thumbnailFile.data, "base64");
-                        await bucketFile.save(img).then(async (res) => {
-                            console.log("res");
-                            console.log(res);
-                            const url = await bucketFile.getSignedUrl({
-                                action: "read",
-                                expires: "03-09-2500",
-                            });
-                            file.url = url[0];
-                            model.thumbnailFile = await entityManager.save(File_1.File, file);
-                        });
                     }
-                    else {
-                        model.thumbnailFile = new File_1.File();
-                        model.thumbnailFile.guid = newGUID;
-                        model.thumbnailFile.fileName = dto.thumbnailFile.fileName;
-                        const bucketFile = bucket.file(`model/${newGUID}${(0, path_1.extname)(dto.thumbnailFile.fileName)}`);
-                        const img = Buffer.from(dto.thumbnailFile.data, "base64");
-                        await bucketFile.save(img).then(async () => {
-                            const url = await bucketFile.getSignedUrl({
-                                action: "read",
-                                expires: "03-09-2500",
-                            });
-                            model.thumbnailFile.url = url[0];
-                            model.thumbnailFile = await entityManager.save(File_1.File, model.thumbnailFile);
-                        });
-                    }
+                    uploaded = await this.cloudinaryService.uploadDataUri(dto.thumbnailFile.data, dto.thumbnailFile.fileName, "model");
                 }
-                const updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: updatedByUserId,
-                        active: true,
-                    },
-                });
+                if (uploaded) {
+                    uploaded.fileId = (_b = model.thumbnailFile) === null || _b === void 0 ? void 0 : _b.fileId;
+                    model.thumbnailFile = await entityManager.save(File_1.File, uploaded);
+                }
+                const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
+                let updatedBy = this.cacheService.get(updatedByKey);
+                if (!updatedBy) {
+                    updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                        where: {
+                            employeeUserId: updatedByUserId,
+                            active: true,
+                        },
+                        relations: {
+                            role: true,
+                            createdBy: true,
+                            updatedBy: true,
+                            pictureFile: true,
+                        },
+                    });
+                    this.cacheService.set(updatedByKey, updatedBy);
+                }
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
@@ -298,10 +293,12 @@ let ModelService = class ModelService {
                         thumbnailFile: true,
                     },
                 });
-                (_a = model === null || model === void 0 ? void 0 : model.createdBy) === null || _a === void 0 ? true : delete _a.password;
-                (_b = model === null || model === void 0 ? void 0 : model.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
-                (_c = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _c === void 0 ? true : delete _c.password;
-                (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                (_c = model === null || model === void 0 ? void 0 : model.createdBy) === null || _c === void 0 ? true : delete _c.password;
+                (_d = model === null || model === void 0 ? void 0 : model.createdBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                (_e = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _e === void 0 ? true : delete _e.password;
+                (_f = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _f === void 0 ? true : delete _f.refreshToken;
+                this.cacheService.del(cache_constant_1.CacheKeys.model.byId(model === null || model === void 0 ? void 0 : model.modelId));
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
                 return model;
             }
             catch (ex) {
@@ -317,22 +314,59 @@ let ModelService = class ModelService {
     async updateOrder(dtos, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
             try {
-                const updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: updatedByUserId,
-                        active: true,
-                    },
-                });
+                const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
+                let updatedBy = this.cacheService.get(updatedByKey);
+                if (!updatedBy) {
+                    updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                        where: {
+                            employeeUserId: updatedByUserId,
+                            active: true,
+                        },
+                        relations: {
+                            role: true,
+                            createdBy: true,
+                            updatedBy: true,
+                            pictureFile: true,
+                        },
+                    });
+                    this.cacheService.set(updatedByKey, updatedBy);
+                }
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
                 const sequenceMap = new Map(dtos.map((dto) => [dto.modelId, dto.sequenceId]));
-                const models = await entityManager.find(Model_1.Model, {
-                    where: {
-                        modelId: (0, typeorm_2.In)(Array.from(sequenceMap.keys())),
-                    },
-                });
-                if (models.length !== dtos.length) {
+                const ids = Array.from(sequenceMap.keys());
+                const modelsById = new Map();
+                const dbMisses = [];
+                for (const id of ids) {
+                    const ck = cache_constant_1.CacheKeys.model.byId
+                        ? cache_constant_1.CacheKeys.model.byId(id)
+                        : `model:id:${id}`;
+                    const cached = this.cacheService.get(ck);
+                    if (cached) {
+                        modelsById.set(String(id), Object.assign({}, cached));
+                    }
+                    else {
+                        dbMisses.push(String(id));
+                    }
+                }
+                if (dbMisses.length) {
+                    const fetched = await entityManager.find(Model_1.Model, {
+                        where: { modelId: (0, typeorm_2.In)(dbMisses) },
+                    });
+                    for (const m of fetched) {
+                        const mId = String(m.modelId);
+                        modelsById.set(mId, m);
+                        const ck = cache_constant_1.CacheKeys.model.byId
+                            ? cache_constant_1.CacheKeys.model.byId(mId)
+                            : `model:id:${mId}`;
+                        this.cacheService.set(ck, m);
+                    }
+                }
+                const models = ids
+                    .map((id) => modelsById.get(String(id)))
+                    .filter((m) => !!m);
+                if (models.length !== ids.length) {
                     throw new Error("Some models specified in the request were not found.");
                 }
                 let tempSequence = Math.max(...models.map((cat) => parseInt(cat.sequenceId))) + 1;
@@ -351,6 +385,7 @@ let ModelService = class ModelService {
                     model.updatedBy = updatedBy;
                 }
                 await entityManager.save(models);
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
                 return models.map((x) => {
                     var _a, _b, _c, _d;
                     (_a = x === null || x === void 0 ? void 0 : x.createdBy) === null || _a === void 0 ? true : delete _a.password;
@@ -368,33 +403,61 @@ let ModelService = class ModelService {
     }
     async delete(modelId, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d;
-            let model = await entityManager.findOne(Model_1.Model, {
-                where: {
-                    modelId,
-                    active: true,
-                },
-            });
+            var _a, _b, _c, _d, _e;
+            const key = cache_constant_1.CacheKeys.model.byId(modelId);
+            let model = this.cacheService.get(key);
+            if (!model) {
+                model = await entityManager.findOne(Model_1.Model, {
+                    where: {
+                        modelId,
+                        active: true,
+                    },
+                    relations: {
+                        thumbnailFile: true,
+                    },
+                });
+            }
             if (!model) {
                 throw Error(model_constant_1.MODEL_ERROR_NOT_FOUND);
             }
             model.active = false;
             model.lastUpdatedAt = await (0, utils_2.getDate)();
-            const updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                where: {
-                    employeeUserId: updatedByUserId,
-                    active: true,
-                },
-            });
+            const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
+            let updatedBy = this.cacheService.get(updatedByKey);
+            if (!updatedBy) {
+                updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                    where: {
+                        employeeUserId: updatedByUserId,
+                        active: true,
+                    },
+                    relations: {
+                        role: true,
+                        createdBy: true,
+                        updatedBy: true,
+                        pictureFile: true,
+                    },
+                });
+                this.cacheService.set(updatedByKey, updatedBy);
+            }
             if (!updatedBy) {
                 throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
             }
             model.updatedBy = updatedBy;
+            if (model.thumbnailFile) {
+                try {
+                    await this.cloudinaryService.deleteByPublicId((_a = model.thumbnailFile) === null || _a === void 0 ? void 0 : _a.publicId);
+                }
+                catch (ex) {
+                    console.log(ex);
+                }
+            }
             model = await entityManager.save(Model_1.Model, model);
-            (_a = model === null || model === void 0 ? void 0 : model.createdBy) === null || _a === void 0 ? true : delete _a.password;
-            (_b = model === null || model === void 0 ? void 0 : model.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
-            (_c = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _c === void 0 ? true : delete _c.password;
-            (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+            (_b = model === null || model === void 0 ? void 0 : model.createdBy) === null || _b === void 0 ? true : delete _b.password;
+            (_c = model === null || model === void 0 ? void 0 : model.createdBy) === null || _c === void 0 ? true : delete _c.refreshToken;
+            (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.password;
+            (_e = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _e === void 0 ? true : delete _e.refreshToken;
+            this.cacheService.del(cache_constant_1.CacheKeys.model.byId(model === null || model === void 0 ? void 0 : model.modelId));
+            this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
             return model;
         });
     }
@@ -403,7 +466,9 @@ ModelService = __decorate([
     (0, common_1.Injectable)(),
     __param(1, (0, typeorm_1.InjectRepository)(Model_1.Model)),
     __metadata("design:paramtypes", [firebase_provider_1.FirebaseProvider,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        cloudinary_service_1.CloudinaryService,
+        cache_service_1.CacheService])
 ], ModelService);
 exports.ModelService = ModelService;
 //# sourceMappingURL=model.service.js.map

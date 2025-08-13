@@ -13,13 +13,14 @@ const typeorm_1 = require("@nestjs/typeorm");
 const employee_user_service_1 = require("../../services/employee-user.service");
 const EmployeeUsers_1 = require("../../db/entities/EmployeeUsers");
 const email_service_1 = require("../../services/email.service");
+const cloudinary_service_1 = require("../../services/cloudinary.service");
 let EmployeeUserModule = class EmployeeUserModule {
 };
 EmployeeUserModule = __decorate([
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature([EmployeeUsers_1.EmployeeUsers])],
         controllers: [employee_user_controller_1.EmployeeUserController],
-        providers: [employee_user_service_1.EmployeeUserService, email_service_1.EmailService],
+        providers: [employee_user_service_1.EmployeeUserService, email_service_1.EmailService, cloudinary_service_1.CloudinaryService],
         exports: [employee_user_service_1.EmployeeUserService, email_service_1.EmailService],
     })
 ], EmployeeUserModule);

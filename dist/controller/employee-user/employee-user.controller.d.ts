@@ -18,5 +18,8 @@ export declare class EmployeeUserController {
     }): Promise<ApiResponseModel<EmployeeUsers>>;
     updateProfile(userId: string, dto: UpdateEmployeeUserProfileDto): Promise<ApiResponseModel<EmployeeUsers>>;
     update(employeeUserCode: string, dto: UpdateEmployeeUserDto, userId: string): Promise<ApiResponseModel<EmployeeUsers>>;
+    updatePassword(employeeUserCode: string, params: {
+        password: string;
+    }, updatedBy: string): Promise<ApiResponseModel<EmployeeUsers>>;
     delete(employeeUserCode: string, userId: string): Promise<ApiResponseModel<EmployeeUsers>>;
 }

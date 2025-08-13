@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.File = void 0;
 const typeorm_1 = require("typeorm");
+const EmployeeUsers_1 = require("./EmployeeUsers");
 const Model_1 = require("./Model");
 let File = class File {
 };
@@ -23,19 +24,40 @@ __decorate([
     __metadata("design:type", String)
 ], File.prototype, "fileName", void 0);
 __decorate([
-    (0, typeorm_1.Column)("text", { name: "Url", nullable: true }),
+    (0, typeorm_1.Column)("text", { name: "PublicId" }),
     __metadata("design:type", String)
-], File.prototype, "url", void 0);
+], File.prototype, "publicId", void 0);
 __decorate([
-    (0, typeorm_1.Column)("text", { name: "GUID" }),
+    (0, typeorm_1.Column)("text", { name: "SecureUrl" }),
     __metadata("design:type", String)
-], File.prototype, "guid", void 0);
+], File.prototype, "secureUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)("bigint", { name: "Bytes", nullable: true }),
+    __metadata("design:type", String)
+], File.prototype, "bytes", void 0);
+__decorate([
+    (0, typeorm_1.Column)("character varying", { name: "Format", nullable: true }),
+    __metadata("design:type", String)
+], File.prototype, "format", void 0);
+__decorate([
+    (0, typeorm_1.Column)("integer", { name: "Width", nullable: true }),
+    __metadata("design:type", Number)
+], File.prototype, "width", void 0);
+__decorate([
+    (0, typeorm_1.Column)("integer", { name: "Height", nullable: true }),
+    __metadata("design:type", Number)
+], File.prototype, "height", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => EmployeeUsers_1.EmployeeUsers, (employeeUsers) => employeeUsers.pictureFile),
+    __metadata("design:type", Array)
+], File.prototype, "employeeUsers", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => Model_1.Model, (model) => model.thumbnailFile),
     __metadata("design:type", Array)
 ], File.prototype, "models", void 0);
 File = __decorate([
     (0, typeorm_1.Index)("pk_files_901578250", ["fileId"], { unique: true }),
+    (0, typeorm_1.Index)("File_PublicId_idx", ["publicId"], { unique: true }),
     (0, typeorm_1.Entity)("File", { schema: "dbo" })
 ], File);
 exports.File = File;

@@ -108,6 +108,20 @@ let EmployeeUserController = class EmployeeUserController {
             return res;
         }
     }
+    async updatePassword(employeeUserCode, params, updatedBy) {
+        const res = {};
+        try {
+            res.data = await this.employeeUserService.updatePassword(employeeUserCode, params === null || params === void 0 ? void 0 : params.password, updatedBy);
+            res.success = true;
+            res.message = `Employee User password ${api_response_constant_1.UPDATE_SUCCESS}`;
+            return res;
+        }
+        catch (e) {
+            res.success = false;
+            res.message = e.message !== undefined ? e.message : e;
+            return res;
+        }
+    }
     async delete(employeeUserCode, userId) {
         const res = {};
         try {
@@ -182,6 +196,25 @@ __decorate([
     __metadata("design:paramtypes", [String, employee_user_update_dto_1.UpdateEmployeeUserDto, String]),
     __metadata("design:returntype", Promise)
 ], EmployeeUserController.prototype, "update", null);
+__decorate([
+    (0, common_1.Put)("update-password/:employeeUserCode"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: "object",
+            properties: {
+                newPassword: { type: "string", default: null },
+            },
+            required: ["password"],
+        },
+    }),
+    __param(0, (0, common_1.Param)("employeeUserCode")),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, get_user_decorator_1.GetUser)("sub")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, String]),
+    __metadata("design:returntype", Promise)
+], EmployeeUserController.prototype, "updatePassword", null);
 __decorate([
     (0, common_1.Delete)("/:employeeUserCode"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

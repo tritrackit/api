@@ -39,10 +39,5 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], DefaultUnitDto.prototype, "modelId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], DefaultUnitDto.prototype, "locationId", void 0);
 exports.DefaultUnitDto = DefaultUnitDto;
 //# sourceMappingURL=unit-base.dto.js.map

@@ -21,8 +21,4 @@ export class DefaultUnitDto {
   @ApiProperty()
   @IsNotEmpty()
   modelId: string;
-  
-  @ApiProperty()
-  @IsNotEmpty()
-  locationId: string;
 }

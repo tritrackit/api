@@ -23,8 +23,12 @@ BEGIN
     CREATE TABLE dbo."File" (
         "FileId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "FileName" TEXT COLLATE pg_catalog."default" NOT NULL,
-        "Url" TEXT COLLATE pg_catalog."default",
-        "GUID" TEXT COLLATE pg_catalog."default" NOT NULL,
+        "PublicId" TEXT COLLATE pg_catalog."default" NOT NULL,
+        "SecureUrl" TEXT COLLATE pg_catalog."default" NOT NULL,
+        "Bytes" BIGINT NULL,
+        "Format" VARCHAR COLLATE pg_catalog."default",
+        "Width" BIGINT NULL,
+        "Height" BIGINT NULL,
         CONSTRAINT pk_files_901578250 PRIMARY KEY ("FileId")
     );
 
@@ -47,6 +51,7 @@ BEGIN
         "EmployeeUserId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "EmployeeUserCode" VARCHAR COLLATE pg_catalog."default",
         "RoleId" BIGINT NOT NULL,
+        "PictureFileId" BIGINT,
         "UserName" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "Password" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "FirstName" VARCHAR COLLATE pg_catalog."default" NOT NULL,
@@ -264,6 +269,11 @@ BEGIN
     ALTER TABLE dbo."EmployeeUsers"
       ADD CONSTRAINT "fk_EmployeeUsers_UpdatedBy"
         FOREIGN KEY ("UpdatedBy") REFERENCES dbo."EmployeeUsers"("EmployeeUserId") MATCH SIMPLE
+        ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
+
+    ALTER TABLE dbo."EmployeeUsers"
+      ADD CONSTRAINT "fk_EmployeeUsers_PictureFile" 
+        FOREIGN KEY ("PictureFileId") REFERENCES dbo."File" ("FileId") MATCH SIMPLE
         ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
 
     -- Roles → EmployeeUsers (CreatedBy/UpdatedBy)

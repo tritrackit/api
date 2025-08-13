@@ -31,6 +31,6 @@ __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
-], UpdateEmployeeUserProfileDto.prototype, "userProfilePic", void 0);
+], UpdateEmployeeUserProfileDto.prototype, "pictureFile", void 0);
 exports.UpdateEmployeeUserProfileDto = UpdateEmployeeUserProfileDto;
 //# sourceMappingURL=employee-user.update.dto.js.map

@@ -25,10 +25,10 @@ let LocationsController = class LocationsController {
     constructor(locationsService) {
         this.locationsService = locationsService;
     }
-    async getById(locationsId) {
+    async getById(locationId) {
         const res = {};
         try {
-            res.data = await this.locationsService.getById(locationsId);
+            res.data = await this.locationsService.getById(locationId);
             res.success = true;
             return res;
         }
@@ -61,7 +61,7 @@ let LocationsController = class LocationsController {
         try {
             res.data = await this.locationsService.create(accessDto, userId);
             res.success = true;
-            res.message = `Locations ${api_response_constant_1.SAVING_SUCCESS}`;
+            res.message = `Location ${api_response_constant_1.SAVING_SUCCESS}`;
             return res;
         }
         catch (e) {
@@ -70,12 +70,12 @@ let LocationsController = class LocationsController {
             return res;
         }
     }
-    async update(locationsId, dto, userId) {
+    async update(locationId, dto, userId) {
         const res = {};
         try {
-            res.data = await this.locationsService.update(locationsId, dto, userId);
+            res.data = await this.locationsService.update(locationId, dto, userId);
             res.success = true;
-            res.message = `Locations ${api_response_constant_1.UPDATE_SUCCESS}`;
+            res.message = `Location ${api_response_constant_1.UPDATE_SUCCESS}`;
             return res;
         }
         catch (e) {
@@ -84,12 +84,12 @@ let LocationsController = class LocationsController {
             return res;
         }
     }
-    async delete(locationsId, userId) {
+    async delete(locationId, userId) {
         const res = {};
         try {
-            res.data = await this.locationsService.delete(locationsId, userId);
+            res.data = await this.locationsService.delete(locationId, userId);
             res.success = true;
-            res.message = `Locations ${api_response_constant_1.DELETE_SUCCESS}`;
+            res.message = `Location ${api_response_constant_1.DELETE_SUCCESS}`;
             return res;
         }
         catch (e) {
@@ -100,8 +100,8 @@ let LocationsController = class LocationsController {
     }
 };
 __decorate([
-    (0, common_1.Get)("/:locationsId"),
-    __param(0, (0, common_1.Param)("locationsId")),
+    (0, common_1.Get)("/:locationId"),
+    __param(0, (0, common_1.Param)("locationId")),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -135,9 +135,9 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], LocationsController.prototype, "create", null);
 __decorate([
-    (0, common_1.Put)("/:locationsId"),
+    (0, common_1.Put)("/:locationId"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __param(0, (0, common_1.Param)("locationsId")),
+    __param(0, (0, common_1.Param)("locationId")),
     __param(1, (0, common_1.Body)()),
     __param(2, (0, get_user_decorator_1.GetUser)("sub")),
     __metadata("design:type", Function),
@@ -145,9 +145,9 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], LocationsController.prototype, "update", null);
 __decorate([
-    (0, common_1.Delete)("/:locationsId"),
+    (0, common_1.Delete)("/:locationId"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __param(0, (0, common_1.Param)("locationsId")),
+    __param(0, (0, common_1.Param)("locationId")),
     __param(1, (0, get_user_decorator_1.GetUser)("sub")),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),

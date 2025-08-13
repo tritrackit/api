@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmployeeUsers = void 0;
 const typeorm_1 = require("typeorm");
 const EmployeeUserActivityLogs_1 = require("./EmployeeUserActivityLogs");
+const File_1 = require("./File");
 const Roles_1 = require("./Roles");
 const Locations_1 = require("./Locations");
 const Model_1 = require("./Model");
@@ -98,6 +99,11 @@ __decorate([
     __metadata("design:type", Array)
 ], EmployeeUsers.prototype, "employeeUsers", void 0);
 __decorate([
+    (0, typeorm_1.ManyToOne)(() => File_1.File, (file) => file.employeeUsers),
+    (0, typeorm_1.JoinColumn)([{ name: "PictureFileId", referencedColumnName: "fileId" }]),
+    __metadata("design:type", File_1.File)
+], EmployeeUsers.prototype, "pictureFile", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => Roles_1.Roles, (roles) => roles.employeeUsers),
     (0, typeorm_1.JoinColumn)([{ name: "RoleId", referencedColumnName: "roleId" }]),
     __metadata("design:type", Roles_1.Roles)
@@ -160,10 +166,10 @@ __decorate([
     __metadata("design:type", Array)
 ], EmployeeUsers.prototype, "units2", void 0);
 EmployeeUsers = EmployeeUsers_1 = __decorate([
-    (0, typeorm_1.Index)("EmployeeUsers_Email_Active_idx", ["active", "email"], { unique: true }),
     (0, typeorm_1.Index)("EmployeeUsers_UserName_Active_idx", ["active", "userName"], {
         unique: true,
     }),
+    (0, typeorm_1.Index)("EmployeeUsers_Email_Active_idx", ["active", "email"], { unique: true }),
     (0, typeorm_1.Index)("EmployeeUsers_pkey", ["employeeUserId"], { unique: true }),
     (0, typeorm_1.Entity)("EmployeeUsers", { schema: "dbo" })
 ], EmployeeUsers);

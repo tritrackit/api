@@ -28,6 +28,8 @@ import { ConfigService } from "@nestjs/config";
 import { EmailService } from "./email.service";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import e from "express";
+import { CacheKeys } from "src/common/constant/cache.constant";
+import { CacheService } from "./cache.service";
 
 @Injectable()
 export class AuthService {
@@ -36,20 +38,28 @@ export class AuthService {
     private readonly employeeUserRepo: Repository<EmployeeUsers>,
     private emailService: EmailService,
     private jwtService: JwtService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly cacheService: CacheService
   ) {}
 
   async login({ userName, password }) {
     try {
-      const employeeUser = await this.employeeUserRepo.findOne({
-        where: {
-          userName,
-          active: true,
-        },
-        relations: {
-          role: true,
-        },
-      });
+      const key = CacheKeys.employeeUsers.byUserName(userName);
+      let employeeUser = this.cacheService.get<EmployeeUsers>(key);
+      if (!employeeUser) {
+        employeeUser = await this.employeeUserRepo.findOne({
+          where: {
+            userName,
+            active: true,
+          },
+          relations: {
+            role: true,
+            createdBy: true,
+            updatedBy: true,
+          },
+        });
+        this.cacheService.set(key, employeeUser);
+      }
       if (!employeeUser) {
         throw Error(LOGIN_ERROR_USER_NOT_FOUND);
       }
@@ -66,13 +76,14 @@ export class AuthService {
         employeeUser.employeeUserId,
         employeeUser.email
       );
-      delete employeeUser.password;
-      delete employeeUser.invitationCode;
-      return {
+      const response = {
         ...employeeUser,
         accessToken,
         refreshToken,
       };
+      delete response.password;
+      delete response.invitationCode;
+      return response;
     } catch (ex) {
       throw ex;
     }
@@ -80,17 +91,27 @@ export class AuthService {
 
   async verify({ email, hashCode }) {
     try {
-      const employeeUser = await this.employeeUserRepo.findOne({
-        where: {
-          email: email,
-          active: true,
-        },
-      });
+      const key = CacheKeys.employeeUsers.byEmail(email);
+      let employeeUser = this.cacheService.get<EmployeeUsers>(key);
+      if (!employeeUser) {
+        employeeUser = await this.employeeUserRepo.findOne({
+          where: {
+            email,
+            active: true,
+          },
+          relations: {
+            role: true,
+            createdBy: true,
+            updatedBy: true,
+          },
+        });
+        this.cacheService.set(key, employeeUser);
+      }
       if (!employeeUser) {
         throw Error(LOGIN_ERROR_USER_NOT_FOUND);
       }
       if (employeeUser.accessGranted) {
-        throw Error("The user has already been granted access!");
+        throw Error("The user has already been granted role!");
       }
       const codeMatch = await compare(hashCode, employeeUser.invitationCode);
       if (!codeMatch) {
@@ -98,6 +119,13 @@ export class AuthService {
       }
       employeeUser.accessGranted = true;
       await this.employeeUserRepo.save(employeeUser);
+      this.cacheService.del(
+        CacheKeys.employeeUsers.byId(employeeUser?.employeeUserId)
+      );
+      this.cacheService.del(
+        CacheKeys.employeeUsers.byCode(employeeUser?.employeeUserCode)
+      );
+      this.cacheService.delByPrefix(CacheKeys.employeeUsers.prefix);
       return employeeUser;
     } catch (ex) {
       throw ex;
@@ -105,15 +133,23 @@ export class AuthService {
   }
 
   async refresh(employeeUserId: string, refreshToken: string) {
-    const employeeUser = await this.employeeUserRepo.findOne({
-      where: {
-        employeeUserId,
-        active: true,
-      },
-      relations: {
-        role: true,
-      },
-    });
+    const employeeUserKey = CacheKeys.employeeUsers.byId(employeeUserId);
+    let employeeUser = this.cacheService.get<EmployeeUsers>(employeeUserKey);
+    if (!employeeUser) {
+      employeeUser = await this.employeeUserRepo.findOne({
+        where: {
+          employeeUserId,
+          active: true,
+        },
+        relations: {
+          role: true,
+          createdBy: true,
+          updatedBy: true,
+          pictureFile: true,
+        },
+      });
+      this.cacheService.set(employeeUserKey, employeeUser);
+    }
     if (!employeeUser || employeeUser.refreshToken !== refreshToken) {
       throw new ForbiddenException("Invalid token");
     }
@@ -133,15 +169,24 @@ export class AuthService {
       { secret: this.config.get<string>("REFRESH_SECRET"), expiresIn: "7d" }
     );
 
-    const employeeUser = await this.employeeUserRepo.findOne({
-      where: {
-        employeeUserId,
-        active: true,
-      },
-      relations: {
-        role: true,
-      },
-    });
+    const employeeUserKey = CacheKeys.employeeUsers.byId(employeeUserId);
+    let employeeUser = this.cacheService.get<EmployeeUsers>(employeeUserKey);
+    if (!employeeUser) {
+      employeeUser = await this.employeeUserRepo.findOne({
+        where: {
+          employeeUserId,
+          active: true,
+        },
+        relations: {
+          role: true,
+          createdBy: true,
+          updatedBy: true,
+          pictureFile: true,
+        },
+      });
+      this.cacheService.set(employeeUserKey, employeeUser);
+    }
+
     if (!employeeUser) {
       throw new ForbiddenException("User not found");
     }
@@ -156,16 +201,27 @@ export class AuthService {
     refreshToken: string,
     employeeUserId: string
   ) {
-    const employeeUser = await this.employeeUserRepo.findOne({
-      where: {
-        refreshToken,
-        employeeUserId,
-        active: true,
-      },
-      relations: {
-        role: true,
-      },
-    });
+    const employeeUserKey = CacheKeys.employeeUsers.byToken(
+      employeeUserId,
+      refreshToken
+    );
+    let employeeUser = this.cacheService.get<EmployeeUsers>(employeeUserKey);
+    if (!employeeUser) {
+      employeeUser = await this.employeeUserRepo.findOne({
+        where: {
+          refreshToken,
+          employeeUserId,
+          active: true,
+        },
+        relations: {
+          role: true,
+          createdBy: true,
+          updatedBy: true,
+          pictureFile: true,
+        },
+      });
+      this.cacheService.set(employeeUserKey, employeeUser);
+    }
 
     if (!employeeUser) {
       throw new ForbiddenException("Invalid token");
@@ -177,16 +233,23 @@ export class AuthService {
   }
 
   async logOut(employeeUserId: string) {
-    const employeeUser = await this.employeeUserRepo.findOne({
-      where: {
-        employeeUserId,
-        active: true,
-      },
-      relations: {
-        role: true,
-      },
-    });
-
+    const employeeUserKey = CacheKeys.employeeUsers.byId(employeeUserId);
+    let employeeUser = this.cacheService.get<EmployeeUsers>(employeeUserKey);
+    if (!employeeUser) {
+      employeeUser = await this.employeeUserRepo.findOne({
+        where: {
+          employeeUserId,
+          active: true,
+        },
+        relations: {
+          role: true,
+          createdBy: true,
+          updatedBy: true,
+          pictureFile: true,
+        },
+      });
+      this.cacheService.set(employeeUserKey, employeeUser);
+    }
     if (employeeUser) {
       employeeUser.refreshToken = null;
       await this.employeeUserRepo.save(employeeUser);

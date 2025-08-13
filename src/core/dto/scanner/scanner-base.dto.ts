@@ -23,6 +23,10 @@ export class DefaultScannerDto {
   @ApiProperty()
   @IsNotEmpty()
   assignedEmployeeUserId: string;
+  
+  @ApiProperty()
+  @IsNotEmpty()
+  statusId: string;
 
   @ApiProperty()
   @IsNotEmpty()

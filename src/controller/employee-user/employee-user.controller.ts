@@ -161,6 +161,39 @@ export class EmployeeUserController {
     }
   }
 
+  @Put("update-password/:employeeUserCode")
+  @UseGuards(JwtAuthGuard)
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        newPassword: { type: "string", default: null },
+      },
+      required: ["password"],
+    },
+  })
+  async updatePassword(
+    @Param("employeeUserCode") employeeUserCode: string,
+    @Body() params: { password: string },
+    @GetUser("sub") updatedBy: string
+  ) {
+    const res: ApiResponseModel<EmployeeUsers> = {} as any;
+    try {
+      res.data = await this.employeeUserService.updatePassword(
+        employeeUserCode,
+        params?.password,
+        updatedBy
+      );
+      res.success = true;
+      res.message = `Employee User password ${UPDATE_SUCCESS}`;
+      return res;
+    } catch (e) {
+      res.success = false;
+      res.message = e.message !== undefined ? e.message : e;
+      return res;
+    }
+  }
+
   @Delete("/:employeeUserCode")
   @UseGuards(JwtAuthGuard)
   async delete(

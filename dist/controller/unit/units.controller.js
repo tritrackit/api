@@ -22,14 +22,15 @@ const units_service_1 = require("../../services/units.service");
 const jwt_auth_guard_1 = require("../../core/auth/jwt-auth.guard");
 const get_user_decorator_1 = require("../../core/auth/get-user.decorator");
 const unit_logs_dto_1 = require("../../core/dto/unit/unit-logs.dto");
+const api_key_scanner_guard_1 = require("../../core/auth/api-key-scanner.guard");
 let UnitsController = class UnitsController {
     constructor(unitsService) {
         this.unitsService = unitsService;
     }
-    async getById(unitId) {
+    async getByCode(unitCode) {
         const res = {};
         try {
-            res.data = await this.unitsService.getById(unitId);
+            res.data = await this.unitsService.getByCode(unitCode);
             res.success = true;
             return res;
         }
@@ -99,12 +100,13 @@ let UnitsController = class UnitsController {
             return res;
         }
     }
-    async unitLogs(dto) {
+    async unitLogs(dto, req) {
+        var _a;
         const res = {};
         try {
-            res.data = await this.unitsService.unitLogs(dto);
+            res.data = await this.unitsService.unitLogs(dto, (_a = req.scanner) === null || _a === void 0 ? void 0 : _a.code);
             res.success = true;
-            res.message = `Unit ${api_response_constant_1.SAVING_SUCCESS}`;
+            res.message = `Unit logs ${api_response_constant_1.SAVING_SUCCESS}`;
             return res;
         }
         catch (e) {
@@ -115,12 +117,12 @@ let UnitsController = class UnitsController {
     }
 };
 __decorate([
-    (0, common_1.Get)("/:unitId"),
-    __param(0, (0, common_1.Param)("unitId")),
+    (0, common_1.Get)("/:unitCode"),
+    __param(0, (0, common_1.Param)("unitCode")),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], UnitsController.prototype, "getById", null);
+], UnitsController.prototype, "getByCode", null);
 __decorate([
     (0, common_1.Post)("/page"),
     (0, swagger_1.ApiBody)({
@@ -170,9 +172,12 @@ __decorate([
 ], UnitsController.prototype, "delete", null);
 __decorate([
     (0, common_1.Post)("unit-logs"),
+    (0, swagger_1.ApiSecurity)("apiKey"),
+    (0, common_1.UseGuards)(api_key_scanner_guard_1.ApiKeyScannerGuard),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [unit_logs_dto_1.LogsDto]),
+    __metadata("design:paramtypes", [unit_logs_dto_1.LogsDto, Object]),
     __metadata("design:returntype", Promise)
 ], UnitsController.prototype, "unitLogs", null);
 UnitsController = __decorate([

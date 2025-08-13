@@ -28,12 +28,12 @@ import { GetUser } from "src/core/auth/get-user.decorator";
 export class LocationsController {
   constructor(private readonly locationsService: LocationsService) {}
 
-  @Get("/:locationsId")
+  @Get("/:locationId")
   // @UseGuards(JwtAuthGuard)
-  async getById(@Param("locationsId") locationsId: string) {
+  async getById(@Param("locationId") locationId: string) {
     const res = {} as ApiResponseModel<Locations>;
     try {
-      res.data = await this.locationsService.getById(locationsId);
+      res.data = await this.locationsService.getById(locationId);
       res.success = true;
       return res;
     } catch (e) {
@@ -94,7 +94,7 @@ export class LocationsController {
     try {
       res.data = await this.locationsService.create(accessDto, userId);
       res.success = true;
-      res.message = `Locations ${SAVING_SUCCESS}`;
+      res.message = `Location ${SAVING_SUCCESS}`;
       return res;
     } catch (e) {
       res.success = false;
@@ -103,18 +103,18 @@ export class LocationsController {
     }
   }
 
-  @Put("/:locationsId")
+  @Put("/:locationId")
   @UseGuards(JwtAuthGuard)
   async update(
-    @Param("locationsId") locationsId: string,
+    @Param("locationId") locationId: string,
     @Body() dto: UpdateLocationsDto,
     @GetUser("sub") userId: string
   ) {
     const res: ApiResponseModel<Locations> = {} as any;
     try {
-      res.data = await this.locationsService.update(locationsId, dto, userId);
+      res.data = await this.locationsService.update(locationId, dto, userId);
       res.success = true;
-      res.message = `Locations ${UPDATE_SUCCESS}`;
+      res.message = `Location ${UPDATE_SUCCESS}`;
       return res;
     } catch (e) {
       res.success = false;
@@ -123,17 +123,17 @@ export class LocationsController {
     }
   }
 
-  @Delete("/:locationsId")
+  @Delete("/:locationId")
   @UseGuards(JwtAuthGuard)
   async delete(
-    @Param("locationsId") locationsId: string,
+    @Param("locationId") locationId: string,
     @GetUser("sub") userId: string
   ) {
     const res: ApiResponseModel<Locations> = {} as any;
     try {
-      res.data = await this.locationsService.delete(locationsId, userId);
+      res.data = await this.locationsService.delete(locationId, userId);
       res.success = true;
-      res.message = `Locations ${DELETE_SUCCESS}`;
+      res.message = `Location ${DELETE_SUCCESS}`;
       return res;
     } catch (e) {
       res.success = false;

@@ -14,13 +14,16 @@ const Units_1 = require("../../db/entities/Units");
 const units_service_1 = require("../../services/units.service");
 const firebase_provider_module_1 = require("../../core/provider/firebase/firebase-provider.module");
 const pusher_service_1 = require("../../services/pusher.service");
+const api_key_scanner_guard_1 = require("../../core/auth/api-key-scanner.guard");
+const scanner_service_1 = require("../../services/scanner.service");
+const Scanner_1 = require("../../db/entities/Scanner");
 let UnitsModule = class UnitsModule {
 };
 UnitsModule = __decorate([
     (0, common_1.Module)({
-        imports: [firebase_provider_module_1.FirebaseProviderModule, typeorm_1.TypeOrmModule.forFeature([Units_1.Units])],
+        imports: [firebase_provider_module_1.FirebaseProviderModule, typeorm_1.TypeOrmModule.forFeature([Units_1.Units, Scanner_1.Scanner])],
         controllers: [units_controller_1.UnitsController],
-        providers: [units_service_1.UnitsService, pusher_service_1.PusherService],
+        providers: [units_service_1.UnitsService, pusher_service_1.PusherService, scanner_service_1.ScannerService, api_key_scanner_guard_1.ApiKeyScannerGuard],
         exports: [units_service_1.UnitsService, pusher_service_1.PusherService],
     })
 ], UnitsModule);

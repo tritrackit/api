@@ -32,6 +32,7 @@ async function bootstrap() {
       { type: "http", scheme: "bearer", bearerFormat: "JWT", in: "header" },
       "jwt"
     )
+    .addApiKey({ type: "apiKey", in: "header", name: "X-API-Key" }, "apiKey")
     .build();
   // the next two lines did the trick
   app.use(bodyParser.json({ limit: "50mb" }));

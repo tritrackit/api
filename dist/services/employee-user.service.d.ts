@@ -3,10 +3,14 @@ import { UpdateEmployeeUserDto, UpdateEmployeeUserProfileDto } from "src/core/dt
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Repository } from "typeorm";
 import { EmailService } from "./email.service";
+import { CloudinaryService } from "./cloudinary.service";
+import { CacheService } from "./cache.service";
 export declare class EmployeeUserService {
     private readonly employeeUserRepo;
-    private emailService;
-    constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService);
+    private readonly emailService;
+    private readonly cloudinaryService;
+    private readonly cacheService;
+    constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService, cloudinaryService: CloudinaryService, cacheService: CacheService);
     getPagination({ pageSize, pageIndex, order, columnDef }: {
         pageSize: any;
         pageIndex: any;
@@ -23,4 +27,5 @@ export declare class EmployeeUserService {
     updateProfile(employeeUserId: string, dto: UpdateEmployeeUserProfileDto): Promise<EmployeeUsers>;
     update(employeeUserCode: any, dto: UpdateEmployeeUserDto, updatedByUserId: string): Promise<EmployeeUsers>;
     delete(employeeUserCode: any, updatedByUserId: any): Promise<EmployeeUsers>;
+    updatePassword(employeeUserCode: any, password: any, updatedByUserId: any): Promise<EmployeeUsers>;
 }

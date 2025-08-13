@@ -3,5 +3,5 @@ export declare class UpdateEmployeeUserDto extends DefaultEmployeeUserDto {
     roleCode: string;
 }
 export declare class UpdateEmployeeUserProfileDto extends DefaultEmployeeUserDto {
-    userProfilePic: any;
+    pictureFile: any;
 }

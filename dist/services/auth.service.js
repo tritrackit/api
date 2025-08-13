@@ -22,24 +22,34 @@ const auth_error_constant_1 = require("../common/constant/auth-error.constant");
 const config_1 = require("@nestjs/config");
 const email_service_1 = require("./email.service");
 const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
+const cache_constant_1 = require("../common/constant/cache.constant");
+const cache_service_1 = require("./cache.service");
 let AuthService = class AuthService {
-    constructor(employeeUserRepo, emailService, jwtService, config) {
+    constructor(employeeUserRepo, emailService, jwtService, config, cacheService) {
         this.employeeUserRepo = employeeUserRepo;
         this.emailService = emailService;
         this.jwtService = jwtService;
         this.config = config;
+        this.cacheService = cacheService;
     }
     async login({ userName, password }) {
         try {
-            const employeeUser = await this.employeeUserRepo.findOne({
-                where: {
-                    userName,
-                    active: true,
-                },
-                relations: {
-                    role: true,
-                },
-            });
+            const key = cache_constant_1.CacheKeys.employeeUsers.byUserName(userName);
+            let employeeUser = this.cacheService.get(key);
+            if (!employeeUser) {
+                employeeUser = await this.employeeUserRepo.findOne({
+                    where: {
+                        userName,
+                        active: true,
+                    },
+                    relations: {
+                        role: true,
+                        createdBy: true,
+                        updatedBy: true,
+                    },
+                });
+                this.cacheService.set(key, employeeUser);
+            }
             if (!employeeUser) {
                 throw Error(auth_error_constant_1.LOGIN_ERROR_USER_NOT_FOUND);
             }
@@ -51,10 +61,11 @@ let AuthService = class AuthService {
                 throw Error(auth_error_constant_1.LOGIN_ERROR_PENDING_ACCESS_REQUEST);
             }
             const { accessToken, refreshToken } = await this.issueTokens(employeeUser.employeeUserId, employeeUser.email);
-            delete employeeUser.password;
-            delete employeeUser.invitationCode;
-            return Object.assign(Object.assign({}, employeeUser), { accessToken,
+            const response = Object.assign(Object.assign({}, employeeUser), { accessToken,
                 refreshToken });
+            delete response.password;
+            delete response.invitationCode;
+            return response;
         }
         catch (ex) {
             throw ex;
@@ -62,17 +73,27 @@ let AuthService = class AuthService {
     }
     async verify({ email, hashCode }) {
         try {
-            const employeeUser = await this.employeeUserRepo.findOne({
-                where: {
-                    email: email,
-                    active: true,
-                },
-            });
+            const key = cache_constant_1.CacheKeys.employeeUsers.byEmail(email);
+            let employeeUser = this.cacheService.get(key);
+            if (!employeeUser) {
+                employeeUser = await this.employeeUserRepo.findOne({
+                    where: {
+                        email,
+                        active: true,
+                    },
+                    relations: {
+                        role: true,
+                        createdBy: true,
+                        updatedBy: true,
+                    },
+                });
+                this.cacheService.set(key, employeeUser);
+            }
             if (!employeeUser) {
                 throw Error(auth_error_constant_1.LOGIN_ERROR_USER_NOT_FOUND);
             }
             if (employeeUser.accessGranted) {
-                throw Error("The user has already been granted access!");
+                throw Error("The user has already been granted role!");
             }
             const codeMatch = await (0, utils_1.compare)(hashCode, employeeUser.invitationCode);
             if (!codeMatch) {
@@ -80,6 +101,9 @@ let AuthService = class AuthService {
             }
             employeeUser.accessGranted = true;
             await this.employeeUserRepo.save(employeeUser);
+            this.cacheService.del(cache_constant_1.CacheKeys.employeeUsers.byId(employeeUser === null || employeeUser === void 0 ? void 0 : employeeUser.employeeUserId));
+            this.cacheService.del(cache_constant_1.CacheKeys.employeeUsers.byCode(employeeUser === null || employeeUser === void 0 ? void 0 : employeeUser.employeeUserCode));
+            this.cacheService.delByPrefix(cache_constant_1.CacheKeys.employeeUsers.prefix);
             return employeeUser;
         }
         catch (ex) {
@@ -87,15 +111,23 @@ let AuthService = class AuthService {
         }
     }
     async refresh(employeeUserId, refreshToken) {
-        const employeeUser = await this.employeeUserRepo.findOne({
-            where: {
-                employeeUserId,
-                active: true,
-            },
-            relations: {
-                role: true,
-            },
-        });
+        const employeeUserKey = cache_constant_1.CacheKeys.employeeUsers.byId(employeeUserId);
+        let employeeUser = this.cacheService.get(employeeUserKey);
+        if (!employeeUser) {
+            employeeUser = await this.employeeUserRepo.findOne({
+                where: {
+                    employeeUserId,
+                    active: true,
+                },
+                relations: {
+                    role: true,
+                    createdBy: true,
+                    updatedBy: true,
+                    pictureFile: true,
+                },
+            });
+            this.cacheService.set(employeeUserKey, employeeUser);
+        }
         if (!employeeUser || employeeUser.refreshToken !== refreshToken) {
             throw new common_1.ForbiddenException("Invalid token");
         }
@@ -104,15 +136,23 @@ let AuthService = class AuthService {
     async issueTokens(employeeUserId, email) {
         const accessToken = this.jwtService.sign({ sub: employeeUserId, email }, { secret: this.config.get("ACCESS_SECRET"), expiresIn: "15m" });
         const refreshToken = this.jwtService.sign({ sub: employeeUserId }, { secret: this.config.get("REFRESH_SECRET"), expiresIn: "7d" });
-        const employeeUser = await this.employeeUserRepo.findOne({
-            where: {
-                employeeUserId,
-                active: true,
-            },
-            relations: {
-                role: true,
-            },
-        });
+        const employeeUserKey = cache_constant_1.CacheKeys.employeeUsers.byId(employeeUserId);
+        let employeeUser = this.cacheService.get(employeeUserKey);
+        if (!employeeUser) {
+            employeeUser = await this.employeeUserRepo.findOne({
+                where: {
+                    employeeUserId,
+                    active: true,
+                },
+                relations: {
+                    role: true,
+                    createdBy: true,
+                    updatedBy: true,
+                    pictureFile: true,
+                },
+            });
+            this.cacheService.set(employeeUserKey, employeeUser);
+        }
         if (!employeeUser) {
             throw new common_1.ForbiddenException("User not found");
         }
@@ -123,31 +163,47 @@ let AuthService = class AuthService {
         return { accessToken, refreshToken };
     }
     async getNewAccessAndRefreshToken(refreshToken, employeeUserId) {
-        const employeeUser = await this.employeeUserRepo.findOne({
-            where: {
-                refreshToken,
-                employeeUserId,
-                active: true,
-            },
-            relations: {
-                role: true,
-            },
-        });
+        const employeeUserKey = cache_constant_1.CacheKeys.employeeUsers.byToken(employeeUserId, refreshToken);
+        let employeeUser = this.cacheService.get(employeeUserKey);
+        if (!employeeUser) {
+            employeeUser = await this.employeeUserRepo.findOne({
+                where: {
+                    refreshToken,
+                    employeeUserId,
+                    active: true,
+                },
+                relations: {
+                    role: true,
+                    createdBy: true,
+                    updatedBy: true,
+                    pictureFile: true,
+                },
+            });
+            this.cacheService.set(employeeUserKey, employeeUser);
+        }
         if (!employeeUser) {
             throw new common_1.ForbiddenException("Invalid token");
         }
         return await this.issueTokens(employeeUser.employeeUserId, employeeUser.email);
     }
     async logOut(employeeUserId) {
-        const employeeUser = await this.employeeUserRepo.findOne({
-            where: {
-                employeeUserId,
-                active: true,
-            },
-            relations: {
-                role: true,
-            },
-        });
+        const employeeUserKey = cache_constant_1.CacheKeys.employeeUsers.byId(employeeUserId);
+        let employeeUser = this.cacheService.get(employeeUserKey);
+        if (!employeeUser) {
+            employeeUser = await this.employeeUserRepo.findOne({
+                where: {
+                    employeeUserId,
+                    active: true,
+                },
+                relations: {
+                    role: true,
+                    createdBy: true,
+                    updatedBy: true,
+                    pictureFile: true,
+                },
+            });
+            this.cacheService.set(employeeUserKey, employeeUser);
+        }
         if (employeeUser) {
             employeeUser.refreshToken = null;
             await this.employeeUserRepo.save(employeeUser);
@@ -160,7 +216,8 @@ AuthService = __decorate([
     __metadata("design:paramtypes", [typeorm_2.Repository,
         email_service_1.EmailService,
         jwt_1.JwtService,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        cache_service_1.CacheService])
 ], AuthService);
 exports.AuthService = AuthService;
 //# sourceMappingURL=auth.service.js.map

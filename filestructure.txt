@@ -24,6 +24,7 @@
         |-- constant
             |-- api-response.constant.ts
             |-- auth-error.constant.ts
+            |-- cache.constant.ts
             |-- date.constant.ts
             |-- employee-user-error.constant.ts
             |-- locations.constant.ts
@@ -72,6 +73,7 @@
             |-- units.module.ts
     |-- core
         |-- auth
+            |-- api-key-scanner.guard.ts
             |-- get-user.decorator.ts
             |-- jwt-auth.guard.ts
             |-- jwt.strategy.ts
@@ -149,6 +151,10 @@
     |-- services
         |-- auth.service.spec.ts
         |-- auth.service.ts
+        |-- cache.service.spec.ts
+        |-- cache.service.ts
+        |-- cloudinary.service.spec.ts
+        |-- cloudinary.service.ts
         |-- email.service.spec.ts
         |-- email.service.ts
         |-- employee-user.service.spec.ts

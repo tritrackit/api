@@ -28,5 +28,5 @@ export class UpdateEmployeeUserDto extends DefaultEmployeeUserDto {
 export class UpdateEmployeeUserProfileDto extends DefaultEmployeeUserDto {
   @ApiProperty()
   @IsOptional()
-  userProfilePic: any;
+  pictureFile: any;
 }

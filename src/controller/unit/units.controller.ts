@@ -6,9 +6,10 @@ import {
   Param,
   Post,
   Put,
+  Req,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiBody, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiBody, ApiSecurity, ApiTags } from "@nestjs/swagger";
 import {
   DELETE_SUCCESS,
   SAVING_SUCCESS,
@@ -23,6 +24,7 @@ import { JwtAuthGuard } from "src/core/auth/jwt-auth.guard";
 import { GetUser } from "src/core/auth/get-user.decorator";
 import { LogsDto } from "src/core/dto/unit/unit-logs.dto";
 import { UnitLogs } from "src/db/entities/UnitLogs";
+import { ApiKeyScannerGuard } from "src/core/auth/api-key-scanner.guard";
 
 @ApiTags("units")
 @Controller("units")
@@ -30,12 +32,12 @@ import { UnitLogs } from "src/db/entities/UnitLogs";
 export class UnitsController {
   constructor(private readonly unitsService: UnitsService) {}
 
-  @Get("/:unitId")
+  @Get("/:unitCode")
   // @UseGuards(JwtAuthGuard)
-  async getById(@Param("unitId") unitId: string) {
+  async getByCode(@Param("unitCode") unitCode: string) {
     const res = {} as ApiResponseModel<Units>;
     try {
-      res.data = await this.unitsService.getById(unitId);
+      res.data = await this.unitsService.getByCode(unitCode);
       res.success = true;
       return res;
     } catch (e) {
@@ -145,13 +147,15 @@ export class UnitsController {
   }
 
   @Post("unit-logs")
+  @ApiSecurity("apiKey")
+  @UseGuards(ApiKeyScannerGuard)
   // @UseGuards(JwtAuthGuard)
-  async unitLogs(@Body() dto: LogsDto) {
+  async unitLogs(@Body() dto: LogsDto, @Req() req: any) {
     const res: ApiResponseModel<UnitLogs[]> = {} as any;
     try {
-      res.data = await this.unitsService.unitLogs(dto);
+      res.data = await this.unitsService.unitLogs(dto, req.scanner?.code);
       res.success = true;
-      res.message = `Unit ${SAVING_SUCCESS}`;
+      res.message = `Unit logs ${SAVING_SUCCESS}`;
       return res;
     } catch (e) {
       res.success = false;

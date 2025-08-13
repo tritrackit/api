@@ -2,9 +2,11 @@ import { Locations } from "src/db/entities/Locations";
 import { CreateLocationsDto } from "src/core/dto/locations/locations.create.dto";
 import { UpdateLocationsDto } from "src/core/dto/locations/locations.update.dto";
 import { Repository } from "typeorm";
+import { CacheService } from "./cache.service";
 export declare class LocationsService {
     private readonly locationsRepo;
-    constructor(locationsRepo: Repository<Locations>);
+    private readonly cacheService;
+    constructor(locationsRepo: Repository<Locations>, cacheService: CacheService);
     getPagination({ pageSize, pageIndex, order, columnDef }: {
         pageSize: any;
         pageIndex: any;

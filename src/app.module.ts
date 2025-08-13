@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, OnApplicationBootstrap } from "@nestjs/common";
 import { AppService } from "./app.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfigService } from "./db/typeorm/typeorm.service";
@@ -12,6 +12,8 @@ import { ModelModule } from "./controller/model/model.module";
 import { ScannerModule } from "./controller/scanner/scanner.module";
 import { LocationsModule } from "./controller/locations/locations.module";
 import { UnitsModule } from "./controller/unit/units.module";
+import { CacheService } from "./services/cache.service";
+import { CacheModule } from "./core/cache/cache.module";
 const envFilePath: string = getEnvPath(`${__dirname}/envs`);
 
 @Module({
@@ -27,9 +29,17 @@ const envFilePath: string = getEnvPath(`${__dirname}/envs`);
     ModelModule,
     ScannerModule,
     LocationsModule,
-    UnitsModule
+    UnitsModule,
+    CacheModule
   ],
-  providers: [AppService],
+  providers: [AppService, CacheService],
   controllers: [],
 })
-export class AppModule {}
+export class AppModule implements OnApplicationBootstrap {
+  constructor(private readonly cache: CacheService) {}
+  onApplicationBootstrap() {
+    if (process.env.NODE_ENV !== "production") {
+      // this.cache.flushAll();
+    }
+  }
+}

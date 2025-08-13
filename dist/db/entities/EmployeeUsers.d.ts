@@ -1,4 +1,5 @@
 import { EmployeeUserActivityLogs } from "./EmployeeUserActivityLogs";
+import { File } from "./File";
 import { Roles } from "./Roles";
 import { Locations } from "./Locations";
 import { Model } from "./Model";
@@ -24,6 +25,7 @@ export declare class EmployeeUsers {
     employeeUserActivityLogs: EmployeeUserActivityLogs[];
     createdBy: EmployeeUsers;
     employeeUsers: EmployeeUsers[];
+    pictureFile: File;
     role: Roles;
     updatedBy: EmployeeUsers;
     employeeUsers2: EmployeeUsers[];

@@ -18,6 +18,9 @@ const EmployeeUsers_1 = require("../../db/entities/EmployeeUsers");
 const jwt_strategy_1 = require("../../core/auth/jwt.strategy");
 const employee_user_module_1 = require("../employee-user/employee-user.module");
 const refresh_token_strategy_1 = require("../../core/auth/refresh-token.strategy");
+const api_key_scanner_guard_1 = require("../../core/auth/api-key-scanner.guard");
+const scanner_service_1 = require("../../services/scanner.service");
+const Scanner_1 = require("../../db/entities/Scanner");
 let AuthModule = class AuthModule {
 };
 AuthModule = __decorate([
@@ -26,10 +29,17 @@ AuthModule = __decorate([
             employee_user_module_1.EmployeeUserModule,
             passport_1.PassportModule.register({}),
             jwt_1.JwtModule.register({}),
-            typeorm_1.TypeOrmModule.forFeature([EmployeeUsers_1.EmployeeUsers]),
+            typeorm_1.TypeOrmModule.forFeature([EmployeeUsers_1.EmployeeUsers, Scanner_1.Scanner]),
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, email_service_1.EmailService, jwt_strategy_1.JwtStrategy, refresh_token_strategy_1.RefreshTokenStrategy],
+        providers: [
+            auth_service_1.AuthService,
+            email_service_1.EmailService,
+            jwt_strategy_1.JwtStrategy,
+            refresh_token_strategy_1.RefreshTokenStrategy,
+            scanner_service_1.ScannerService,
+            api_key_scanner_guard_1.ApiKeyScannerGuard
+        ],
         exports: [auth_service_1.AuthService, email_service_1.EmailService],
     })
 ], AuthModule);

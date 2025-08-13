@@ -17,14 +17,6 @@ class ScannerLogDto {
 }
 __decorate([
     (0, swagger_1.ApiProperty)({
-        type: String,
-        description: "The scanner Code",
-    }),
-    (0, class_validator_1.IsNotEmpty)(),
-    __metadata("design:type", String)
-], ScannerLogDto.prototype, "scannerCode", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({
         type: Date,
         description: "The timestamp of the log",
     }),
@@ -53,7 +45,6 @@ __decorate([
         example: [
             {
                 rfid: "ABC1234567",
-                scannerCode: "123456",
                 timestamp: "2025-08-06T14:00:00Z",
             },
         ],

@@ -21,17 +21,28 @@ const utils_1 = require("../common/utils/utils");
 const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
 const Roles_1 = require("../db/entities/Roles");
 const typeorm_2 = require("typeorm");
+const cache_service_1 = require("./cache.service");
+const cache_constant_1 = require("../common/constant/cache.constant");
 let RoleService = class RoleService {
-    constructor(roleRepo) {
+    constructor(roleRepo, cacheService) {
         this.roleRepo = roleRepo;
+        this.cacheService = cacheService;
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
+        const key = cache_constant_1.CacheKeys.roles.list(pageIndex, pageSize, JSON.stringify(order), JSON.stringify(columnDef));
+        const cached = this.cacheService.get(key);
+        if (cached)
+            return cached;
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
         const take = Number(pageSize);
         const condition = (0, utils_1.columnDefToTypeORMCondition)(columnDef);
         const [results, total] = await Promise.all([
             this.roleRepo.find({
                 where: Object.assign(Object.assign({}, condition), { active: true }),
+                relations: {
+                    createdBy: true,
+                    updatedBy: true,
+                },
                 skip,
                 take,
                 order,
@@ -40,7 +51,7 @@ let RoleService = class RoleService {
                 where: Object.assign(Object.assign({}, condition), { active: true }),
             }),
         ]);
-        return {
+        const response = {
             results: results.map((x) => {
                 var _a, _b, _c, _d;
                 (_a = x === null || x === void 0 ? void 0 : x.createdBy) === null || _a === void 0 ? true : delete _a.password;
@@ -51,9 +62,15 @@ let RoleService = class RoleService {
             }),
             total,
         };
+        this.cacheService.set(key, response);
+        return response;
     }
     async getByCode(roleCode) {
         var _a, _b, _c, _d;
+        const key = cache_constant_1.CacheKeys.roles.byCode(roleCode);
+        const cached = this.cacheService.get(key);
+        if (cached)
+            return cached;
         const result = await this.roleRepo.findOne({
             select: {
                 roleId: true,
@@ -65,6 +82,10 @@ let RoleService = class RoleService {
                 roleCode,
                 active: true,
             },
+            relations: {
+                createdBy: true,
+                updatedBy: true,
+            },
         });
         if (!result) {
             throw Error(role_constant_1.ROLE_ERROR_NOT_FOUND);
@@ -73,6 +94,7 @@ let RoleService = class RoleService {
         (_b = result === null || result === void 0 ? void 0 : result.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
         (_c = result === null || result === void 0 ? void 0 : result.updatedBy) === null || _c === void 0 ? true : delete _c.password;
         (_d = result === null || result === void 0 ? void 0 : result.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+        this.cacheService.set(key, result);
         return result;
     }
     async create(dto, createdByUserId) {
@@ -83,14 +105,22 @@ let RoleService = class RoleService {
                 role.name = dto.name;
                 role.accessPages = dto.accessPages;
                 role.dateCreated = await (0, utils_1.getDate)();
-                const createdBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: createdByUserId,
-                        active: true,
-                    },
-                });
+                const createdByKey = cache_constant_1.CacheKeys.employeeUsers.byId(createdByUserId);
+                let createdBy = this.cacheService.get(createdByKey);
                 if (!createdBy) {
-                    throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
+                    createdBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                        where: {
+                            employeeUserId: createdByUserId,
+                            active: true,
+                        },
+                        relations: {
+                            role: true,
+                            createdBy: true,
+                            updatedBy: true,
+                            pictureFile: true,
+                        },
+                    });
+                    this.cacheService.set(createdByKey, createdBy);
                 }
                 role.createdBy = createdBy;
                 role = await entityManager.save(role);
@@ -100,6 +130,7 @@ let RoleService = class RoleService {
                 (_b = role === null || role === void 0 ? void 0 : role.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
                 (_c = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _c === void 0 ? true : delete _c.password;
                 (_d = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.roles.prefix);
                 return role;
             }
             catch (ex) {
@@ -116,24 +147,46 @@ let RoleService = class RoleService {
         return await this.roleRepo.manager.transaction(async (entityManager) => {
             var _a, _b, _c, _d;
             try {
-                let role = await entityManager.findOne(Roles_1.Roles, {
-                    where: {
-                        roleCode,
-                        active: true,
-                    },
-                });
+                const key = cache_constant_1.CacheKeys.roles.byCode(roleCode);
+                let role = this.cacheService.get(key);
+                if (!role) {
+                    role = await entityManager.findOne(Roles_1.Roles, {
+                        where: {
+                            roleCode,
+                            active: true,
+                        },
+                        relations: {
+                            createdBy: true,
+                            updatedBy: true,
+                        },
+                    });
+                }
                 if (!role) {
                     throw Error(role_constant_1.ROLE_ERROR_NOT_FOUND);
                 }
                 role.name = dto.name;
                 role.accessPages = dto.accessPages;
                 role.lastUpdatedAt = await (0, utils_1.getDate)();
-                const updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: updatedByUserId,
-                        active: true,
-                    },
-                });
+                const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
+                let updatedBy = this.cacheService.get(updatedByKey);
+                if (!updatedBy) {
+                    updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                        where: {
+                            employeeUserId: updatedByUserId,
+                            active: true,
+                        },
+                        relations: {
+                            role: true,
+                            createdBy: true,
+                            updatedBy: true,
+                            pictureFile: true,
+                        },
+                    });
+                    this.cacheService.set(updatedByKey, updatedBy);
+                }
+                if (!updatedBy) {
+                    throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
+                }
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
@@ -143,6 +196,9 @@ let RoleService = class RoleService {
                 (_b = role === null || role === void 0 ? void 0 : role.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
                 (_c = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _c === void 0 ? true : delete _c.password;
                 (_d = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                this.cacheService.del(cache_constant_1.CacheKeys.roles.byId(role === null || role === void 0 ? void 0 : role.roleId));
+                this.cacheService.del(cache_constant_1.CacheKeys.roles.byCode(role.roleCode));
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.roles.prefix);
                 return role;
             }
             catch (ex) {
@@ -158,23 +214,42 @@ let RoleService = class RoleService {
     async delete(roleCode, updatedByUserId) {
         return await this.roleRepo.manager.transaction(async (entityManager) => {
             var _a, _b, _c, _d;
-            let role = await entityManager.findOne(Roles_1.Roles, {
-                where: {
-                    roleCode,
-                    active: true,
-                },
-            });
+            const key = cache_constant_1.CacheKeys.roles.byCode(roleCode);
+            let role = this.cacheService.get(key);
+            if (!role) {
+                role = await entityManager.findOne(Roles_1.Roles, {
+                    where: {
+                        roleCode,
+                        active: true,
+                    },
+                    relations: {
+                        createdBy: true,
+                        updatedBy: true,
+                    },
+                });
+            }
             if (!role) {
                 throw Error(role_constant_1.ROLE_ERROR_NOT_FOUND);
             }
             role.active = false;
             role.lastUpdatedAt = await (0, utils_1.getDate)();
-            const updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                where: {
-                    employeeUserId: updatedByUserId,
-                    active: true,
-                },
-            });
+            const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
+            let updatedBy = this.cacheService.get(updatedByKey);
+            if (!updatedBy) {
+                updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
+                    where: {
+                        employeeUserId: updatedByUserId,
+                        active: true,
+                    },
+                    relations: {
+                        role: true,
+                        createdBy: true,
+                        updatedBy: true,
+                        pictureFile: true,
+                    },
+                });
+                this.cacheService.set(updatedByKey, updatedBy);
+            }
             if (!updatedBy) {
                 throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
             }
@@ -184,6 +259,9 @@ let RoleService = class RoleService {
             (_b = role === null || role === void 0 ? void 0 : role.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
             (_c = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _c === void 0 ? true : delete _c.password;
             (_d = role === null || role === void 0 ? void 0 : role.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+            this.cacheService.del(cache_constant_1.CacheKeys.roles.byId(role === null || role === void 0 ? void 0 : role.roleId));
+            this.cacheService.del(cache_constant_1.CacheKeys.roles.byCode(role.roleCode));
+            this.cacheService.delByPrefix(cache_constant_1.CacheKeys.roles.prefix);
             return role;
         });
     }
@@ -191,7 +269,8 @@ let RoleService = class RoleService {
 RoleService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(Roles_1.Roles)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        cache_service_1.CacheService])
 ], RoleService);
 exports.RoleService = RoleService;
 //# sourceMappingURL=roles.service.js.map
