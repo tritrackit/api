@@ -456,7 +456,7 @@ let UnitsService = class UnitsService {
     }
     async unitLogs(logsDto, scannerCode) {
         return await this.unitsRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             const unitLogs = [];
             const registerEvents = [];
             if (!((_a = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _a === void 0 ? void 0 : _a.length))
@@ -478,19 +478,20 @@ let UnitsService = class UnitsService {
                         rfid,
                         scannerCode,
                         timestamp: log.timestamp,
-                        employeeUserId: (_c = scanner.assignedEmployeeUser) === null || _c === void 0 ? void 0 : _c.employeeUserId,
+                        employeeUser: scanner.assignedEmployeeUser,
+                        location: scanner.location,
                     });
                     continue;
                 }
-                let lastLog = (_d = lastLogMemo.get(rfid)) !== null && _d !== void 0 ? _d : null;
+                let lastLog = (_c = lastLogMemo.get(rfid)) !== null && _c !== void 0 ? _c : null;
                 if (lastLog === null && !lastLogMemo.has(rfid)) {
                     lastLog = await this.getLastLogCached(entityManager, rfid);
                     lastLogMemo.set(rfid, lastLog);
                 }
-                const newStatusId = Number((_e = scanner.status) === null || _e === void 0 ? void 0 : _e.statusId);
+                const newStatusId = Number((_d = scanner.status) === null || _d === void 0 ? void 0 : _d.statusId);
                 if (!newStatusId)
                     continue;
-                const prevStatusId = (_g = Number((_f = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _f === void 0 ? void 0 : _f.statusId)) !== null && _g !== void 0 ? _g : status_constants_1.STATUS.REGISTERED;
+                const prevStatusId = (_f = Number((_e = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _e === void 0 ? void 0 : _e.statusId)) !== null && _f !== void 0 ? _f : status_constants_1.STATUS.REGISTERED;
                 const isForward = prevStatusId === null || newStatusId > prevStatusId;
                 if (!isForward)
                     continue;
@@ -498,7 +499,7 @@ let UnitsService = class UnitsService {
                 unitLog.timestamp = new Date(log.timestamp);
                 unitLog.unit = unit;
                 unitLog.status = scanner.status;
-                unitLog.prevStatus = (_h = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) !== null && _h !== void 0 ? _h : null;
+                unitLog.prevStatus = (_g = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) !== null && _g !== void 0 ? _g : null;
                 unitLog.location = scanner.location;
                 unitLog.employeeUser = scanner.assignedEmployeeUser;
                 unitLogs.push(unitLog);
@@ -518,8 +519,8 @@ let UnitsService = class UnitsService {
                     return true;
                 });
                 const pusherCalls = unique
-                    .filter((e) => !!e.employeeUserId)
-                    .map((e) => this.pusherService.sendTriggerRegister(e.employeeUserId, e));
+                    .filter((e) => { var _a; return !!((_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode); })
+                    .map((e) => { var _a; return this.pusherService.sendTriggerRegister((_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode, e); });
                 tasks.push(pusherCalls.length
                     ? Promise.allSettled(pusherCalls)
                     : Promise.resolve([]));
@@ -531,9 +532,9 @@ let UnitsService = class UnitsService {
             if (unitLogs.length) {
                 const rfidsToUpdate = Array.from(new Set(unitLogs.map((l) => l.unit.rfid)));
                 for (const rfid of rfidsToUpdate) {
-                    const newest = (_j = unitLogs
+                    const newest = (_h = unitLogs
                         .filter((l) => l.unit.rfid === rfid)
-                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _j !== void 0 ? _j : null;
+                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _h !== void 0 ? _h : null;
                     this.cacheService.set(this.keyLastLog(rfid), newest, {
                         ttlSeconds: 10,
                     });

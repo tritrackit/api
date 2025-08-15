@@ -507,8 +507,9 @@ export class UnitsService {
       const registerEvents: Array<{
         rfid: string;
         scannerCode: string;
+        employeeUser: EmployeeUsers;
+        location: Locations
         timestamp: Date;
-        employeeUserId: string;
       }> = [];
 
       if (!logsDto?.data?.length) return unitLogs;
@@ -537,7 +538,8 @@ export class UnitsService {
             rfid,
             scannerCode,
             timestamp: log.timestamp,
-            employeeUserId: scanner.assignedEmployeeUser?.employeeUserId,
+            employeeUser: scanner.assignedEmployeeUser,
+            location: scanner.location,
           });
           continue;
         }
@@ -583,9 +585,9 @@ export class UnitsService {
         });
 
         const pusherCalls = unique
-          .filter((e) => !!e.employeeUserId)
+          .filter((e) => !!e.employeeUser?.employeeUserCode)
           .map((e) =>
-            this.pusherService.sendTriggerRegister(e.employeeUserId!, e)
+            this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e)
           );
 
         tasks.push(

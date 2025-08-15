@@ -38,9 +38,9 @@ let PusherService = class PusherService {
             throw ex;
         }
     }
-    async sendTriggerRegister(userId, data) {
+    async sendTriggerRegister(employeeUserCode, data) {
         try {
-            this.pusher.trigger(userId, "register_request", {
+            this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
                 data,
             });
         }

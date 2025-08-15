@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
+import { Locations } from "src/db/entities/Locations";
 
 const Pusher = require("pusher");
 
@@ -31,9 +33,18 @@ export class PusherService {
     }
   }
 
-  async sendTriggerRegister(userId: string, data) {
+  async sendTriggerRegister(
+    employeeUserCode: string,
+    data: {
+      rfid: string;
+      scannerCode: string;
+      employeeUser: EmployeeUsers;
+      location: Locations;
+      timestamp: Date;
+    }
+  ) {
     try {
-      this.pusher.trigger(userId, "register_request", {
+      this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
         data,
       });
     } catch (ex) {
