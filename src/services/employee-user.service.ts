@@ -34,6 +34,7 @@ import { CloudinaryService } from "./cloudinary.service";
 import { File } from "src/db/entities/File";
 import { CacheService } from "./cache.service";
 import { CacheKeys } from "src/common/constant/cache.constant";
+import { last } from "rxjs";
 
 @Injectable()
 export class EmployeeUserService {
@@ -83,6 +84,22 @@ export class EmployeeUserService {
           ...condition,
           active: true,
           lastName: ILike(`%${nameFilter?.filter ?? ""}%`),
+        },
+        {
+          ...condition,
+          active: true,
+          firstName:
+            nameFilter?.filter?.length > 0
+              ? ILike(`%${nameFilter?.filter.split(" ")[0] ?? ""}%`)
+              : ILike(`%${nameFilter?.filter ?? ""}%`)
+        },
+        {
+          ...condition,
+          active: true,
+          lastName:
+            nameFilter?.filter?.length > 0
+              ? ILike(`%${nameFilter?.filter.split(" ")[0] ?? ""}%`)
+              : ILike(`%${nameFilter?.filter ?? ""}%`)
         },
       ];
     } else {
@@ -147,7 +164,7 @@ export class EmployeeUserService {
     this.cacheService.set(key, res);
     const response = {
       ...res,
-    }
+    };
     delete response?.password;
     delete response?.refreshToken;
     delete response?.createdBy?.password;
@@ -180,7 +197,7 @@ export class EmployeeUserService {
     this.cacheService.set(key, res);
     const response = {
       ...res,
-    }
+    };
     delete response?.password;
     delete response?.refreshToken;
     delete response?.createdBy?.password;
@@ -248,6 +265,11 @@ export class EmployeeUserService {
             throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
           }
           employeeUser.createdBy = createdBy;
+          employeeUser.createdBy = {
+            ...createdBy,
+          };
+          employeeUser.createdBy.createdBy;
+          employeeUser.createdBy.updatedBy;
           employeeUser.dateCreated = await getDate();
           employeeUser = await entityManager.save(EmployeeUsers, employeeUser);
           employeeUser.employeeUserCode = generateIndentityCode(

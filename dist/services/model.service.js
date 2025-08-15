@@ -184,6 +184,9 @@ let ModelService = class ModelService {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
                 model.createdBy = createdBy;
+                model.createdBy = Object.assign({}, createdBy);
+                delete model.createdBy.createdBy;
+                delete model.createdBy.updatedBy;
                 model = await entityManager.save(Model_1.Model, model);
                 let uploaded;
                 if (dto.thumbnailFile) {
@@ -225,7 +228,7 @@ let ModelService = class ModelService {
     }
     async update(modelId, dto, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             try {
                 const key = cache_constant_1.CacheKeys.model.byId(modelId);
                 let model = this.cacheService.get(key);
@@ -284,6 +287,9 @@ let ModelService = class ModelService {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
                 model.updatedBy = updatedBy;
+                model.updatedBy = Object.assign({}, updatedBy);
+                (_c = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _c === void 0 ? true : delete _c.createdBy;
+                (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.updatedBy;
                 model = await entityManager.save(Model_1.Model, model);
                 model = await entityManager.findOne(Model_1.Model, {
                     where: {
@@ -293,10 +299,10 @@ let ModelService = class ModelService {
                         thumbnailFile: true,
                     },
                 });
-                (_c = model === null || model === void 0 ? void 0 : model.createdBy) === null || _c === void 0 ? true : delete _c.password;
-                (_d = model === null || model === void 0 ? void 0 : model.createdBy) === null || _d === void 0 ? true : delete _d.refreshToken;
-                (_e = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _e === void 0 ? true : delete _e.password;
-                (_f = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _f === void 0 ? true : delete _f.refreshToken;
+                (_e = model === null || model === void 0 ? void 0 : model.createdBy) === null || _e === void 0 ? true : delete _e.password;
+                (_f = model === null || model === void 0 ? void 0 : model.createdBy) === null || _f === void 0 ? true : delete _f.refreshToken;
+                (_g = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _g === void 0 ? true : delete _g.password;
+                (_h = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _h === void 0 ? true : delete _h.refreshToken;
                 this.cacheService.del(cache_constant_1.CacheKeys.model.byId(model === null || model === void 0 ? void 0 : model.modelId));
                 this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
                 return model;
@@ -313,6 +319,7 @@ let ModelService = class ModelService {
     }
     async updateOrder(dtos, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
+            var _a, _b;
             try {
                 const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
                 let updatedBy = this.cacheService.get(updatedByKey);
@@ -373,7 +380,9 @@ let ModelService = class ModelService {
                 for (const model of models) {
                     model.sequenceId = (tempSequence++).toString();
                     model.lastUpdatedAt = await (0, utils_2.getDate)();
-                    model.updatedBy = updatedBy;
+                    model.updatedBy = Object.assign({}, updatedBy);
+                    (_a = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _a === void 0 ? true : delete _a.createdBy;
+                    (_b = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _b === void 0 ? true : delete _b.updatedBy;
                 }
                 await entityManager.save(models);
                 for (const model of models) {
@@ -403,7 +412,7 @@ let ModelService = class ModelService {
     }
     async delete(modelId, updatedByUserId) {
         return await this.modelRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f, _g;
             const key = cache_constant_1.CacheKeys.model.byId(modelId);
             let model = this.cacheService.get(key);
             if (!model) {
@@ -442,20 +451,22 @@ let ModelService = class ModelService {
             if (!updatedBy) {
                 throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
             }
-            model.updatedBy = updatedBy;
+            model.updatedBy = Object.assign({}, updatedBy);
+            (_a = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _a === void 0 ? true : delete _a.createdBy;
+            (_b = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _b === void 0 ? true : delete _b.updatedBy;
             if (model.thumbnailFile) {
                 try {
-                    await this.cloudinaryService.deleteByPublicId((_a = model.thumbnailFile) === null || _a === void 0 ? void 0 : _a.publicId);
+                    await this.cloudinaryService.deleteByPublicId((_c = model.thumbnailFile) === null || _c === void 0 ? void 0 : _c.publicId);
                 }
                 catch (ex) {
                     console.log(ex);
                 }
             }
             model = await entityManager.save(Model_1.Model, model);
-            (_b = model === null || model === void 0 ? void 0 : model.createdBy) === null || _b === void 0 ? true : delete _b.password;
-            (_c = model === null || model === void 0 ? void 0 : model.createdBy) === null || _c === void 0 ? true : delete _c.refreshToken;
-            (_d = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _d === void 0 ? true : delete _d.password;
-            (_e = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _e === void 0 ? true : delete _e.refreshToken;
+            (_d = model === null || model === void 0 ? void 0 : model.createdBy) === null || _d === void 0 ? true : delete _d.password;
+            (_e = model === null || model === void 0 ? void 0 : model.createdBy) === null || _e === void 0 ? true : delete _e.refreshToken;
+            (_f = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _f === void 0 ? true : delete _f.password;
+            (_g = model === null || model === void 0 ? void 0 : model.updatedBy) === null || _g === void 0 ? true : delete _g.refreshToken;
             this.cacheService.del(cache_constant_1.CacheKeys.model.byId(model === null || model === void 0 ? void 0 : model.modelId));
             this.cacheService.delByPrefix(cache_constant_1.CacheKeys.model.prefix);
             return model;

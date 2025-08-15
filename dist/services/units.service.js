@@ -123,7 +123,7 @@ let UnitsService = class UnitsService {
                         relations: {
                             createdBy: true,
                             updatedBy: true,
-                        }
+                        },
                     });
                     this.cacheService.set(modelKey, model);
                 }
@@ -184,7 +184,9 @@ let UnitsService = class UnitsService {
                 if (!createdBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                unit.createdBy = createdBy;
+                unit.createdBy = Object.assign({}, createdBy);
+                delete unit.createdBy.createdBy;
+                delete unit.createdBy.updatedBy;
                 unit = await entityManager.save(Units_1.Units, unit);
                 unit.unitCode = `U-${(0, utils_1.generateIndentityCode)(unit.unitId)}`;
                 await entityManager.save(Units_1.Units, unit);
@@ -267,7 +269,7 @@ let UnitsService = class UnitsService {
                         relations: {
                             createdBy: true,
                             updatedBy: true,
-                        }
+                        },
                     });
                     this.cacheService.set(modelKey, model);
                 }
@@ -295,7 +297,9 @@ let UnitsService = class UnitsService {
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                unit.updatedBy = updatedBy;
+                unit.updatedBy = Object.assign({}, updatedBy);
+                delete unit.updatedBy.createdBy;
+                delete unit.updatedBy.updatedBy;
                 await entityManager.save(Units_1.Units, unit);
                 unit = await entityManager.findOne(Units_1.Units, {
                     where: {

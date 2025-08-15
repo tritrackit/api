@@ -196,7 +196,9 @@ let ScannerService = class ScannerService {
                 if (!assignedEmployeeUser) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                scanner.assignedEmployeeUser = assignedEmployeeUser;
+                scanner.assignedEmployeeUser = Object.assign({}, assignedEmployeeUser);
+                delete scanner.assignedEmployeeUser.createdBy;
+                delete scanner.assignedEmployeeUser.updatedBy;
                 const createdByKey = cache_constant_1.CacheKeys.employeeUsers.byId(createdByUserId);
                 let createdBy = this.cacheService.get(createdByKey);
                 if (!createdBy) {
@@ -217,7 +219,9 @@ let ScannerService = class ScannerService {
                 if (!createdBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                scanner.createdBy = createdBy;
+                scanner.createdBy = Object.assign({}, createdBy);
+                delete scanner.createdBy.createdBy;
+                delete scanner.createdBy.updatedBy;
                 scanner = await entityManager.save(Scanner_1.Scanner, scanner);
                 (_a = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _a === void 0 ? true : delete _a.password;
                 (_b = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _b === void 0 ? true : delete _b.refreshToken;
@@ -234,7 +238,13 @@ let ScannerService = class ScannerService {
                 (ex["message"].toLowerCase().includes("duplicate key") ||
                     ex["message"].toLowerCase().includes("violates unique constraint")) &&
                 ex["message"].includes("Name")) {
-                throw Error("Entry already exists!");
+                throw Error("Name already exists!");
+            }
+            else if (ex["message"] &&
+                (ex["message"].toLowerCase().includes("duplicate key") ||
+                    ex["message"].toLowerCase().includes("violates unique constraint")) &&
+                ex["message"].toLowerCase().includes("scannercode")) {
+                throw Error("Scanner code already exists!");
             }
             else {
                 throw ex;
@@ -286,7 +296,9 @@ let ScannerService = class ScannerService {
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                scanner.updatedBy = updatedBy;
+                scanner.updatedBy = Object.assign({}, updatedBy);
+                delete scanner.updatedBy.createdBy;
+                delete scanner.updatedBy.updatedBy;
                 scanner.scannerCode = dto.scannerCode;
                 scanner.name = dto.name;
                 const statusKey = cache_constant_1.CacheKeys.status.byId(dto.statusId);
@@ -342,7 +354,9 @@ let ScannerService = class ScannerService {
                 if (!assignedEmployeeUser) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                scanner.assignedEmployeeUser = assignedEmployeeUser;
+                scanner.assignedEmployeeUser = Object.assign({}, assignedEmployeeUser);
+                delete scanner.assignedEmployeeUser.createdBy;
+                delete scanner.assignedEmployeeUser.updatedBy;
                 scanner = await entityManager.save(Scanner_1.Scanner, scanner);
                 (_a = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _a === void 0 ? true : delete _a.password;
                 (_b = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _b === void 0 ? true : delete _b.refreshToken;
@@ -413,7 +427,9 @@ let ScannerService = class ScannerService {
             if (!updatedBy) {
                 throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
             }
-            scanner.updatedBy = updatedBy;
+            scanner.updatedBy = Object.assign({}, updatedBy);
+            delete scanner.updatedBy.createdBy;
+            delete scanner.updatedBy.updatedBy;
             scanner = await entityManager.save(Scanner_1.Scanner, scanner);
             (_a = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _a === void 0 ? true : delete _a.password;
             (_b = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _b === void 0 ? true : delete _b.refreshToken;

@@ -34,7 +34,7 @@ let EmployeeUserService = class EmployeeUserService {
         this.cacheService = cacheService;
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const key = cache_constant_1.CacheKeys.employeeUsers.list(pageIndex, pageSize, JSON.stringify(order), JSON.stringify(columnDef));
         const cached = this.cacheService.get(key);
         if (cached)
@@ -51,6 +51,12 @@ let EmployeeUserService = class EmployeeUserService {
             whereCondition = [
                 Object.assign(Object.assign({}, condition), { active: true, firstName: (0, typeorm_2.ILike)(`%${(_a = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _a !== void 0 ? _a : ""}%`) }),
                 Object.assign(Object.assign({}, condition), { active: true, lastName: (0, typeorm_2.ILike)(`%${(_b = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _b !== void 0 ? _b : ""}%`) }),
+                Object.assign(Object.assign({}, condition), { active: true, firstName: ((_c = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) === null || _c === void 0 ? void 0 : _c.length) > 0
+                        ? (0, typeorm_2.ILike)(`%${(_d = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter.split(" ")[0]) !== null && _d !== void 0 ? _d : ""}%`)
+                        : (0, typeorm_2.ILike)(`%${(_e = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _e !== void 0 ? _e : ""}%`) }),
+                Object.assign(Object.assign({}, condition), { active: true, lastName: ((_f = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) === null || _f === void 0 ? void 0 : _f.length) > 0
+                        ? (0, typeorm_2.ILike)(`%${(_g = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter.split(" ")[0]) !== null && _g !== void 0 ? _g : ""}%`)
+                        : (0, typeorm_2.ILike)(`%${(_h = nameFilter === null || nameFilter === void 0 ? void 0 : nameFilter.filter) !== null && _h !== void 0 ? _h : ""}%`) }),
             ];
         }
         else {
@@ -202,6 +208,9 @@ let EmployeeUserService = class EmployeeUserService {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
                 employeeUser.createdBy = createdBy;
+                employeeUser.createdBy = Object.assign({}, createdBy);
+                employeeUser.createdBy.createdBy;
+                employeeUser.createdBy.updatedBy;
                 employeeUser.dateCreated = await (0, utils_1.getDate)();
                 employeeUser = await entityManager.save(EmployeeUsers_1.EmployeeUsers, employeeUser);
                 employeeUser.employeeUserCode = (0, utils_1.generateIndentityCode)(employeeUser.employeeUserId);

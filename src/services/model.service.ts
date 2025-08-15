@@ -214,6 +214,11 @@ export class ModelService {
         }
         model.createdBy = createdBy;
 
+        model.createdBy = {
+          ...createdBy,
+        };
+        delete model.createdBy.createdBy;
+        delete model.createdBy.updatedBy;
         model = await entityManager.save(Model, model);
         let uploaded: File | undefined;
         if (dto.thumbnailFile) {
@@ -325,6 +330,11 @@ export class ModelService {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
         model.updatedBy = updatedBy;
+        model.updatedBy = {
+          ...updatedBy,
+        };
+        delete model?.updatedBy?.createdBy;
+        delete model?.updatedBy?.updatedBy;
         model = await entityManager.save(Model, model);
         model = await entityManager.findOne(Model, {
           where: {
@@ -435,7 +445,12 @@ export class ModelService {
         for (const model of models) {
           model.sequenceId = (tempSequence++).toString();
           model.lastUpdatedAt = await getDate();
-          model.updatedBy = updatedBy;
+          model.updatedBy = {
+            ...updatedBy,
+          };
+
+          delete model?.updatedBy?.createdBy;
+          delete model?.updatedBy?.updatedBy;
         }
         await entityManager.save(models);
 
@@ -507,7 +522,11 @@ export class ModelService {
       if (!updatedBy) {
         throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
       }
-      model.updatedBy = updatedBy;
+      model.updatedBy = {
+        ...updatedBy,
+      };
+      delete model?.updatedBy?.createdBy;
+      delete model?.updatedBy?.updatedBy;
       if (model.thumbnailFile) {
         try {
           await this.cloudinaryService.deleteByPublicId(

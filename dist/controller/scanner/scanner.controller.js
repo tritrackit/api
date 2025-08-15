@@ -25,10 +25,10 @@ let ScannerController = class ScannerController {
     constructor(scannerService) {
         this.scannerService = scannerService;
     }
-    async getById(scannerId) {
+    async getByCode(scannerCode) {
         const res = {};
         try {
-            res.data = await this.scannerService.getById(scannerId);
+            res.data = await this.scannerService.getByCode(scannerCode);
             res.success = true;
             return res;
         }
@@ -100,12 +100,12 @@ let ScannerController = class ScannerController {
     }
 };
 __decorate([
-    (0, common_1.Get)("/:scannerId"),
-    __param(0, (0, common_1.Param)("scannerId")),
+    (0, common_1.Get)("/:scannerCode"),
+    __param(0, (0, common_1.Param)("scannerCode")),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], ScannerController.prototype, "getById", null);
+], ScannerController.prototype, "getByCode", null);
 __decorate([
     (0, common_1.Post)("/page"),
     (0, swagger_1.ApiBody)({

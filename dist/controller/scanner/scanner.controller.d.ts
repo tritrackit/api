@@ -6,7 +6,7 @@ import { ScannerService } from "src/services/scanner.service";
 export declare class ScannerController {
     private readonly scannerService;
     constructor(scannerService: ScannerService);
-    getById(scannerId: string): Promise<ApiResponseModel<Scanner>>;
+    getByCode(scannerCode: string): Promise<ApiResponseModel<Scanner>>;
     getPaginated(params?: {
         pageSize: string;
         pageIndex: string;

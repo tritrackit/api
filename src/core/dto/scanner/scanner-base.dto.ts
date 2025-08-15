@@ -12,7 +12,7 @@ export class DefaultScannerDto {
   @MinLength(3, { message: "scannerCode must be at least 3 characters" })
   @Matches(/^(?=.{1,15}$)([A-Z][A-Za-z0-9_-]*|[0-9][A-Za-z0-9_-]*)$/, {
     message:
-      "scannerCode must start with an uppercase letter or a number, and only contain letters, numbers, underscore (_) or dash (-) with no spaces, max 15 characters",
+      "Invalid value, scanner code must start with an uppercase letter or a number, and only contain letters, numbers, underscore (_) or dash (-) with no spaces, max 15 characters",
   })
   scannerCode: string;
 

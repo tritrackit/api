@@ -99,10 +99,10 @@ let LocationsService = class LocationsService {
         try {
             return await this.locationsRepo.manager.transaction(async (entityManager) => {
                 var _a, _b, _c, _d;
-                let locations = new Locations_1.Locations();
-                locations.locationCode = dto.locationCode;
-                locations.name = dto.name;
-                locations.dateCreated = await (0, utils_1.getDate)();
+                let location = new Locations_1.Locations();
+                location.locationCode = dto.locationCode;
+                location.name = dto.name;
+                location.dateCreated = await (0, utils_1.getDate)();
                 const createdByKey = cache_constant_1.CacheKeys.employeeUsers.byId(createdByUserId);
                 let createdBy = this.cacheService.get(createdByKey);
                 if (!createdBy) {
@@ -123,14 +123,16 @@ let LocationsService = class LocationsService {
                 if (!createdBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                locations.createdBy = createdBy;
-                locations = await entityManager.save(Locations_1.Locations, locations);
-                (_a = locations === null || locations === void 0 ? void 0 : locations.createdBy) === null || _a === void 0 ? true : delete _a.password;
-                (_b = locations === null || locations === void 0 ? void 0 : locations.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
-                (_c = locations === null || locations === void 0 ? void 0 : locations.updatedBy) === null || _c === void 0 ? true : delete _c.password;
-                (_d = locations === null || locations === void 0 ? void 0 : locations.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+                location.createdBy = Object.assign({}, createdBy);
+                delete location.createdBy.createdBy;
+                delete location.createdBy.updatedBy;
+                location = await entityManager.save(Locations_1.Locations, location);
+                (_a = location === null || location === void 0 ? void 0 : location.createdBy) === null || _a === void 0 ? true : delete _a.password;
+                (_b = location === null || location === void 0 ? void 0 : location.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
+                (_c = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _c === void 0 ? true : delete _c.password;
+                (_d = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
                 this.cacheService.delByPrefix(cache_constant_1.CacheKeys.locations.prefix);
-                return locations;
+                return location;
             });
         }
         catch (ex) {
@@ -189,7 +191,9 @@ let LocationsService = class LocationsService {
                 if (!updatedBy) {
                     throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
                 }
-                location.updatedBy = updatedBy;
+                location.updatedBy = Object.assign({}, updatedBy);
+                location.updatedBy.createdBy;
+                location.updatedBy.updatedBy;
                 location = await entityManager.save(Locations_1.Locations, location);
                 (_a = location === null || location === void 0 ? void 0 : location.createdBy) === null || _a === void 0 ? true : delete _a.password;
                 (_b = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _b === void 0 ? true : delete _b.password;
@@ -253,7 +257,9 @@ let LocationsService = class LocationsService {
             if (!updatedBy) {
                 throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
             }
-            location.updatedBy = updatedBy;
+            location.updatedBy = Object.assign({}, updatedBy);
+            delete location.createdBy.createdBy;
+            delete location.createdBy.updatedBy;
             this.cacheService.del(cache_constant_1.CacheKeys.locations.byId(location === null || location === void 0 ? void 0 : location.locationId));
             this.cacheService.delByPrefix(cache_constant_1.CacheKeys.locations.prefix);
             return await entityManager.save(Locations_1.Locations, location);

@@ -133,7 +133,11 @@ export class RoleService {
           });
           this.cacheService.set(createdByKey, createdBy);
         }
-        role.createdBy = createdBy;
+        role.createdBy = {
+          ...createdBy,
+        };
+        delete role.createdBy.createdBy;
+        delete role.createdBy.updatedBy;
         role = await entityManager.save(role);
         role.roleCode = generateIndentityCode(role.roleId);
         role = await entityManager.save(Roles, role);
@@ -200,7 +204,11 @@ export class RoleService {
         if (!updatedBy) {
           throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
         }
-        role.updatedBy = updatedBy;
+        role.updatedBy = {
+          ...updatedBy,
+        };
+        delete role.updatedBy.createdBy;
+        delete role.updatedBy.updatedBy;
         role = await entityManager.save(Roles, role);
         delete role?.createdBy?.password;
         delete role?.createdBy?.refreshToken;

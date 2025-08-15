@@ -29,12 +29,12 @@ import { GetUser } from "src/core/auth/get-user.decorator";
 export class ScannerController {
   constructor(private readonly scannerService: ScannerService) {}
 
-  @Get("/:scannerId")
+  @Get("/:scannerCode")
   // @UseGuards(JwtAuthGuard)
-  async getById(@Param("scannerId") scannerId: string) {
+  async getByCode(@Param("scannerCode") scannerCode: string) {
     const res = {} as ApiResponseModel<Scanner>;
     try {
-      res.data = await this.scannerService.getById(scannerId);
+      res.data = await this.scannerService.getByCode(scannerCode);
       res.success = true;
       return res;
     } catch (e) {
