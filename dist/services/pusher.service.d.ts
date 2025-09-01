@@ -5,7 +5,7 @@ export declare class PusherService {
     private readonly config;
     pusher: any;
     constructor(config: ConfigService);
-    trigger(channel: any, event: any, data: any): void;
+    trigger(channel: any, event: any, data: any): Promise<void>;
     reSync(type: string, data: any): Promise<void>;
     sendTriggerRegister(employeeUserCode: string, data: {
         rfid: string;

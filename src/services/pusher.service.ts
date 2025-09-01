@@ -21,13 +21,13 @@ export class PusherService {
         .includes("true"),
     });
   }
-  trigger(channel, event, data: any) {
-    this.pusher.trigger(channel, event, data);
+  async trigger(channel, event, data: any) {
+    await this.pusher.trigger(channel, event, data);
   }
 
   async reSync(type: string, data: any) {
     try {
-      this.pusher.trigger("all", "reSync", { type, data });
+      await this.pusher.trigger("all", "reSync", { type, data });
     } catch (ex) {
       throw ex;
     }
@@ -44,7 +44,7 @@ export class PusherService {
     }
   ) {
     try {
-      this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
+      await this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
         data,
       });
     } catch (ex) {

@@ -27,12 +27,12 @@ let PusherService = class PusherService {
                 .includes("true"),
         });
     }
-    trigger(channel, event, data) {
-        this.pusher.trigger(channel, event, data);
+    async trigger(channel, event, data) {
+        await this.pusher.trigger(channel, event, data);
     }
     async reSync(type, data) {
         try {
-            this.pusher.trigger("all", "reSync", { type, data });
+            await this.pusher.trigger("all", "reSync", { type, data });
         }
         catch (ex) {
             throw ex;
@@ -40,7 +40,7 @@ let PusherService = class PusherService {
     }
     async sendTriggerRegister(employeeUserCode, data) {
         try {
-            this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
+            await this.pusher.trigger(`scanner-${employeeUserCode}`, "scanner", {
                 data,
             });
         }
