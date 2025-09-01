@@ -16,14 +16,14 @@ class DefaultScannerDto {
 }
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: "Must start with an uppercase letter or number. Can only include letters, numbers, underscore (_) or dash (-). No spaces. Max 15 characters.",
+        description: "Must start with an uppercase letter or number. Can only include letters, numbers, underscore (_) or dash (-). No spaces. Max 20 characters.",
         example: "SCAN_001",
     }),
     (0, class_validator_1.IsNotEmpty)(),
-    (0, class_validator_1.MaxLength)(15, { message: "scannerCode must not exceed 15 characters" }),
+    (0, class_validator_1.MaxLength)(20, { message: "scannerCode must not exceed 20 characters" }),
     (0, class_validator_1.MinLength)(3, { message: "scannerCode must be at least 3 characters" }),
-    (0, class_validator_1.Matches)(/^(?=.{1,15}$)([A-Z][A-Za-z0-9_-]*|[0-9][A-Za-z0-9_-]*)$/, {
-        message: "Invalid value, scanner code must start with an uppercase letter or a number, and only contain letters, numbers, underscore (_) or dash (-) with no spaces, max 15 characters",
+    (0, class_validator_1.Matches)(/^(?=.{1,20}$)([A-Z][A-Za-z0-9_-]*|[0-9][A-Za-z0-9_-]*)$/, {
+        message: "Invalid value, scanner code must start with an uppercase letter or a number, and only contain letters, numbers, underscore (_) or dash (-) with no spaces, max 20 characters",
     }),
     __metadata("design:type", String)
 ], DefaultScannerDto.prototype, "scannerCode", void 0);
