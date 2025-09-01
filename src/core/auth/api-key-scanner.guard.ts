@@ -18,15 +18,19 @@ export class ApiKeyScannerGuard implements CanActivate {
 
     if (!apiKey) throw new UnauthorizedException("Missing API key");
 
-    const scanner = await this.scannerService.getByCode(apiKey);
+    try {
+      const scanner = await this.scannerService.getByCode(apiKey);
 
-    if (!scanner) throw new UnauthorizedException("Invalid API key");
+      if (!scanner) throw new UnauthorizedException("Invalid API key");
 
-    req.scanner = {
-      id: scanner.scannerId,
-      code: scanner.scannerCode,
-      locationId: scanner["locationId"],
-    };
+      req.scanner = {
+        id: scanner.scannerId,
+        code: scanner.scannerCode,
+        locationId: scanner["locationId"],
+      };
+    } catch (error) {
+      throw new UnauthorizedException("Invalid API key");
+    }
     return true;
   }
 }

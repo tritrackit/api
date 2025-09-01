@@ -19,6 +19,6 @@ export declare class ScannerService {
     getById(scannerId: any): Promise<Scanner>;
     getByCode(scannerCode: any): Promise<Scanner>;
     create(dto: CreateScannerDto, createdByUserId: string): Promise<Scanner>;
-    update(scannerCode: any, dto: UpdateScannerDto, updatedByUserId: string): Promise<Scanner>;
+    update(scannerId: any, dto: UpdateScannerDto, updatedByUserId: string): Promise<Scanner>;
     delete(scannerCode: any, updatedByUserId: string): Promise<Scanner>;
 }

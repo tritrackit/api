@@ -21,14 +21,19 @@ let ApiKeyScannerGuard = class ApiKeyScannerGuard {
         const apiKey = req.headers["x-api-key"] || req.query["api_key"];
         if (!apiKey)
             throw new common_1.UnauthorizedException("Missing API key");
-        const scanner = await this.scannerService.getByCode(apiKey);
-        if (!scanner)
+        try {
+            const scanner = await this.scannerService.getByCode(apiKey);
+            if (!scanner)
+                throw new common_1.UnauthorizedException("Invalid API key");
+            req.scanner = {
+                id: scanner.scannerId,
+                code: scanner.scannerCode,
+                locationId: scanner["locationId"],
+            };
+        }
+        catch (error) {
             throw new common_1.UnauthorizedException("Invalid API key");
-        req.scanner = {
-            id: scanner.scannerId,
-            code: scanner.scannerCode,
-            locationId: scanner["locationId"],
-        };
+        }
         return true;
     }
 };

@@ -153,6 +153,7 @@ export class UnitsController {
   async unitLogs(@Body() dto: LogsDto, @Req() req: any) {
     const res: ApiResponseModel<UnitLogs[]> = {} as any;
     try {
+      console.log(JSON.stringify(dto.data))
       res.data = await this.unitsService.unitLogs(dto, req.scanner?.code);
       res.success = true;
       res.message = `Unit logs ${SAVING_SUCCESS}`;

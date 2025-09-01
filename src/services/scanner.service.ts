@@ -281,16 +281,16 @@ export class ScannerService {
     }
   }
 
-  async update(scannerCode, dto: UpdateScannerDto, updatedByUserId: string) {
+  async update(scannerId, dto: UpdateScannerDto, updatedByUserId: string) {
     try {
       return await this.scannerRepo.manager.transaction(
         async (entityManager) => {
-          const scannerKey = CacheKeys.scanner.byCode(scannerCode);
+          const scannerKey = CacheKeys.scanner.byCode(scannerId);
           let scanner = this.cacheService.get<Scanner>(scannerKey);
           if (!scanner) {
             scanner = await entityManager.findOne(Scanner, {
               where: {
-                scannerCode,
+                scannerId,
                 active: true,
               },
               relations: {

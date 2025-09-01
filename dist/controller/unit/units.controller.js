@@ -104,6 +104,7 @@ let UnitsController = class UnitsController {
         var _a;
         const res = {};
         try {
+            console.log(JSON.stringify(dto.data));
             res.data = await this.unitsService.unitLogs(dto, (_a = req.scanner) === null || _a === void 0 ? void 0 : _a.code);
             res.success = true;
             res.message = `Unit logs ${api_response_constant_1.SAVING_SUCCESS}`;
