@@ -13,7 +13,9 @@ import { Locations } from "./Locations";
 import { Model } from "./Model";
 import { Status } from "./Status";
 
-@Index("Units_ModelId_Active_idx", ["active", "modelId"], { unique: true })
+@Index("Units_RFID_ModelId_Active_idx", ["active", "modelId", "rfid"], {
+  unique: true,
+})
 @Index("Units_RFID_Active_idx", ["active", "rfid"], { unique: true })
 @Index("Units_pkey", ["unitId"], { unique: true })
 @Entity("Units", { schema: "dbo" })

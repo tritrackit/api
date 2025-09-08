@@ -199,10 +199,13 @@ BEGIN
         ON dbo."Model" ("ModelName" COLLATE pg_catalog."default" ASC NULLS LAST, "Active" ASC NULLS LAST)
         WHERE "Active" = true;
 
-    -- Note: Unique on (ModelId, Active) can be restrictive; keeping to mirror dbo1.sql
-    CREATE UNIQUE INDEX IF NOT EXISTS "Units_ModelId_Active_idx"
-        ON dbo."Units" ("ModelId" ASC NULLS LAST, "Active" ASC NULLS LAST)
+    CREATE UNIQUE INDEX IF NOT EXISTS "Units_RFID_ModelId_Active_idx"
+        ON dbo."Units" USING btree
+        ("RFID" COLLATE pg_catalog."default" ASC NULLS LAST, "ModelId" ASC NULLS LAST, "Active" ASC NULLS LAST)
+        WITH (deduplicate_items=False)
+        TABLESPACE pg_default
         WHERE "Active" = true;
+
 
     CREATE UNIQUE INDEX IF NOT EXISTS "Units_RFID_Active_idx"
         ON dbo."Units" ("RFID" ASC NULLS LAST, "Active" ASC NULLS LAST)

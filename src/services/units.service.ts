@@ -61,6 +61,9 @@ export class UnitsService {
         relations: {
           createdBy: true,
           updatedBy: true,
+          model: true,
+          status: true,
+          location: true,
         },
         skip,
         take,
@@ -101,6 +104,7 @@ export class UnitsService {
         updatedBy: true,
         model: true,
         location: true,
+        status: true,
       },
     });
     if (!result) {
