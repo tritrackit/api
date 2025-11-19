@@ -91,7 +91,9 @@ __decorate([
     __metadata("design:type", EmployeeUsers_1.EmployeeUsers)
 ], Units.prototype, "updatedBy", void 0);
 Units = __decorate([
-    (0, typeorm_1.Index)("Units_ModelId_Active_idx", ["active", "modelId"], { unique: true }),
+    (0, typeorm_1.Index)("Units_RFID_ModelId_Active_idx", ["active", "modelId", "rfid"], {
+        unique: true,
+    }),
     (0, typeorm_1.Index)("Units_RFID_Active_idx", ["active", "rfid"], { unique: true }),
     (0, typeorm_1.Index)("Units_pkey", ["unitId"], { unique: true }),
     (0, typeorm_1.Entity)("Units", { schema: "dbo" })

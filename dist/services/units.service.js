@@ -52,6 +52,9 @@ let UnitsService = class UnitsService {
                 relations: {
                     createdBy: true,
                     updatedBy: true,
+                    model: true,
+                    status: true,
+                    location: true,
                 },
                 skip,
                 take,
@@ -91,6 +94,7 @@ let UnitsService = class UnitsService {
                 updatedBy: true,
                 model: true,
                 location: true,
+                status: true,
             },
         });
         if (!result) {

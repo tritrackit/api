@@ -15,11 +15,10 @@ export class PusherService {
       key: this.config.get<string>("PUSHER_KEY"),
       secret: this.config.get<string>("PUSHER_SECRET"),
       cluster: this.config.get<string>("PUSHER_CLUSTER"),
-      useTLS: this.config
-        .get<string>("PUSHER_USE_TLS")
-        .toLowerCase()
-        .includes("true"),
-    });
+      useTLS: (this.config.get<string>("PUSHER_USE_TLS") || "true")
+      .toLowerCase()
+      .includes("true"),
+  });
   }
   async trigger(channel, event, data: any) {
     await this.pusher.trigger(channel, event, data);
