@@ -264,6 +264,8 @@ All errors follow this format:
 
   Code   Meaning
   ------ ------------------
+  
+```
   200    Success
   201    Resource created
   400    Bad request
@@ -272,3 +274,5 @@ All errors follow this format:
   404    Not found
   409    Conflict
   500    Server error
+
+```
