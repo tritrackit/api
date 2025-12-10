@@ -6,14 +6,16 @@
     "builds": [
         {
             "src": "dist/main.js",
-            "use": "@vercel/node",
-            "config": {
-                "includeFiles": [
-                    "dist/**"
-                ]
-            }
+            "use": "@vercel/node"
         }
     ],
+    "functions": {
+        "dist/main.js": {
+            "includeFiles": [
+                "dist/**"
+            ]
+        }
+    },
     "routes": [
         {
             "src": "/(.*)",
