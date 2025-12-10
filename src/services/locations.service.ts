@@ -1,19 +1,15 @@
 import { Locations } from "src/db/entities/Locations";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { LOCATIONS_ERROR_NOT_FOUND } from "src/common/constant/locations.constant";
-import { CONST_QUERYCURRENT_TIMESTAMP } from "src/common/constant/timestamp.constant";
-import { EMPLOYEE_USER_ERROR_USER_NOT_FOUND } from "src/common/constant/employee-user-error.constant";
+import { 
+  LOCATIONS_ERROR_NOT_FOUND,
+  FIXED_LOCATIONS,
+  FIXED_LOCATION_IDS 
+} from "src/common/constant/locations.constant";
 import {
   columnDefToTypeORMCondition,
-  generateIndentityCode,
-  getDate,
 } from "src/common/utils/utils";
-import { CreateLocationsDto } from "src/core/dto/locations/locations.create.dto";
-import { UpdateLocationsDto } from "src/core/dto/locations/locations.update.dto";
-import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
-import { Repository } from "typeorm";
-import { Status } from "src/db/entities/Status";
+import { In, Repository } from "typeorm";
 import { CacheKeys } from "src/common/constant/cache.constant";
 import { CacheService } from "./cache.service";
 
@@ -27,8 +23,8 @@ export class LocationsService {
 
   async getPagination({ pageSize, pageIndex, order, columnDef }) {
     const key = CacheKeys.locations.list(
-      pageIndex,
       pageSize,
+      pageIndex,
       JSON.stringify(order),
       JSON.stringify(columnDef)
     );
@@ -38,16 +34,22 @@ export class LocationsService {
     }>(key);
     if (cached) return cached;
 
-    const skip =
-      Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
+    const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
     const take = Number(pageSize);
 
     const condition = columnDefToTypeORMCondition(columnDef);
+    
+    // Only return fixed locations
+    const fixedLocationCondition = {
+      locationId: In(FIXED_LOCATION_IDS),
+      active: true
+    };
+
     const [results, total] = await Promise.all([
       this.locationsRepo.find({
         where: {
           ...condition,
-          active: true,
+          ...fixedLocationCondition,
         },
         relations: {
           createdBy: true,
@@ -60,10 +62,11 @@ export class LocationsService {
       this.locationsRepo.count({
         where: {
           ...condition,
-          active: true,
+          ...fixedLocationCondition,
         },
       }),
     ]);
+    
     const response = {
       results: results.map((x) => {
         delete x?.createdBy?.password;
@@ -79,6 +82,11 @@ export class LocationsService {
   }
 
   async getById(locationId) {
+    // Validate it's a fixed location
+    if (!FIXED_LOCATION_IDS.includes(locationId)) {
+      throw Error(LOCATIONS_ERROR_NOT_FOUND);
+    }
+
     const key = CacheKeys.locations.byId(locationId);
     const cached = this.cacheService.get<Locations>(key);
     if (cached) return cached;
@@ -108,194 +116,42 @@ export class LocationsService {
     return result;
   }
 
-  async create(dto: CreateLocationsDto, createdByUserId: string) {
-    try {
-      return await this.locationsRepo.manager.transaction(
-        async (entityManager) => {
-          let location = new Locations();
-          location.locationCode = dto.locationCode;
-          location.name = dto.name;
-          location.dateCreated = await getDate();
-
-          const createdByKey = CacheKeys.employeeUsers.byId(createdByUserId);
-          let createdBy = this.cacheService.get<EmployeeUsers>(createdByKey);
-          if (!createdBy) {
-            createdBy = await entityManager.findOne(EmployeeUsers, {
-              where: {
-                employeeUserId: createdByUserId,
-                active: true,
-              },
-              relations: {
-                role: true,
-                createdBy: true,
-                updatedBy: true,
-                pictureFile: true,
-              },
-            });
-            this.cacheService.set(createdByKey, createdBy);
-          }
-
-          if (!createdBy) {
-            throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-          }
-          location.createdBy = {
-            ...createdBy,
-          };
-          delete location.createdBy.createdBy;
-          delete location.createdBy.updatedBy;
-          location = await entityManager.save(Locations, location);
-          delete location?.createdBy?.password;
-          delete location?.createdBy?.refreshToken;
-          delete location?.updatedBy?.password;
-          delete location?.updatedBy?.refreshToken;
-          // Invalidate caches
-          this.cacheService.delByPrefix(CacheKeys.locations.prefix);
-          return location;
-        }
-      );
-    } catch (ex) {
-      if (
-        ex["message"] &&
-        (ex["message"].includes("duplicate key") ||
-          ex["message"].includes("violates unique constraint")) &&
-        ex["message"].includes("u_locations")
-      ) {
-        throw Error("Entry already exists!");
-      } else {
-        throw ex;
+  // Helper to get specific fixed location
+  async getFixedLocation(locationType: keyof typeof FIXED_LOCATIONS) {
+    const fixedLocation = FIXED_LOCATIONS[locationType];
+    
+    const location = await this.locationsRepo.findOne({
+      where: { 
+        locationId: fixedLocation.id,
+        active: true 
       }
+    });
+    
+    if (!location) {
+      throw Error(`Fixed location "${fixedLocation.name}" not found. Run system reset.`);
     }
+    
+    return location;
   }
 
-  async update(locationId, dto: UpdateLocationsDto, updatedByUserId: string) {
-    try {
-      return await this.locationsRepo.manager.transaction(
-        async (entityManager) => {
-          const locationKey = CacheKeys.locations.byId(locationId);
-          let location = this.cacheService.get<Locations>(locationKey);
-          if (!location) {
-            location = await entityManager.findOne(Locations, {
-              where: {
-                locationId,
-                active: true,
-              },
-              relations: {
-                createdBy: true,
-                updatedBy: true,
-              },
-            });
-          }
-
-          if (!location) {
-            throw Error(LOCATIONS_ERROR_NOT_FOUND);
-          }
-
-          location.locationCode = dto.locationCode;
-          location.name = dto.name;
-          location.lastUpdatedAt = await getDate();
-          const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
-          let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
-          if (!updatedBy) {
-            updatedBy = await entityManager.findOne(EmployeeUsers, {
-              where: {
-                employeeUserId: updatedByUserId,
-                active: true,
-              },
-              relations: {
-                role: true,
-                createdBy: true,
-                updatedBy: true,
-                pictureFile: true,
-              },
-            });
-            this.cacheService.set(updatedByKey, updatedBy);
-          }
-          if (!updatedBy) {
-            throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-          }
-          location.updatedBy = {
-            ...updatedBy,
-          };
-          location.updatedBy.createdBy;
-          location.updatedBy.updatedBy;
-          location = await entityManager.save(Locations, location);
-          delete location?.createdBy?.password;
-          delete location?.updatedBy?.password;
-          delete location?.createdBy?.refreshToken;
-          delete location?.updatedBy?.refreshToken;
-          // Invalidate caches
-          this.cacheService.del(CacheKeys.locations.byId(location?.locationId));
-          this.cacheService.delByPrefix(CacheKeys.locations.prefix);
-          return location;
-        }
-      );
-    } catch (ex) {
-      if (
-        ex["message"] &&
-        (ex["message"].includes("duplicate key") ||
-          ex["message"].includes("violates unique constraint")) &&
-        ex["message"].includes("u_locations")
-      ) {
-        throw Error("Entry already exists!");
-      } else {
-        throw ex;
-      }
-    }
+  // Get all fixed locations for dropdown
+  async getAllFixedLocations() {
+    return await this.locationsRepo.find({
+      where: {
+        locationId: In(FIXED_LOCATION_IDS),
+        active: true
+      },
+      order: { name: 'ASC' }
+    });
   }
 
-  async delete(locationId, updatedByUserId: string) {
-    return await this.locationsRepo.manager.transaction(
-      async (entityManager) => {
-        const locationKey = CacheKeys.locations.byId(locationId);
-        let location = this.cacheService.get<Locations>(locationKey);
-        if (!location) {
-          location = await entityManager.findOne(Locations, {
-            where: {
-              locationId,
-              active: true,
-            },
-            relations: {
-              createdBy: true,
-              updatedBy: true,
-            },
-          });
-        }
-        if (!location) {
-          throw Error(LOCATIONS_ERROR_NOT_FOUND);
-        }
-        location.active = false;
-        location.lastUpdatedAt = await getDate();
+  // Helper for UnitsService - get Open Area location
+  async getOpenArea() {
+    return await this.getFixedLocation('OPEN_AREA');
+  }
 
-        const updatedByKey = CacheKeys.employeeUsers.byId(updatedByUserId);
-        let updatedBy = this.cacheService.get<EmployeeUsers>(updatedByKey);
-        if (!updatedBy) {
-          updatedBy = await entityManager.findOne(EmployeeUsers, {
-            where: {
-              employeeUserId: updatedByUserId,
-              active: true,
-            },
-            relations: {
-              role: true,
-              createdBy: true,
-              updatedBy: true,
-              pictureFile: true,
-            },
-          });
-          this.cacheService.set(updatedByKey, updatedBy);
-        }
-        if (!updatedBy) {
-          throw Error(EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-        }
-        location.updatedBy = {
-          ...updatedBy,
-        };
-        delete location.createdBy.createdBy;
-        delete location.createdBy.updatedBy;
-        // Invalidate caches
-        this.cacheService.del(CacheKeys.locations.byId(location?.locationId));
-        this.cacheService.delByPrefix(CacheKeys.locations.prefix);
-        return await entityManager.save(Locations, location);
-      }
-    );
+  // Helper for UnitsService - get Warehouse 5 location
+  async getWarehouse5() {
+    return await this.getFixedLocation('WAREHOUSE_5');
   }
 }

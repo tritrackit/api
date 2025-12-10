@@ -59,8 +59,8 @@ const hash = async (value) => {
     return await bcrypt.hash(value, 10);
 };
 exports.hash = hash;
-const compare = async (newValue, hashedValue) => {
-    return await bcrypt.compare(hashedValue, newValue);
+const compare = async (plainText, hashedValue) => {
+    return await bcrypt.compare(plainText, hashedValue);
 };
 exports.compare = compare;
 const getAge = async (birthDate) => {
@@ -155,27 +155,68 @@ const columnDefToTypeORMCondition = (columnDef) => {
             }
         }
         else if (col.type === "number-range") {
+            if (!col.filter || typeof col.filter !== 'string') {
+                continue;
+            }
             const range = col.filter.split("-").map((x) => x === null || x === void 0 ? void 0 : x.trim());
             conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.Between)(Number(range[0]), Number(range[1]))));
         }
         else if (col.type === "number") {
-            const value = !isNaN(Number(col.filter)) ? Number(col.filter) : 0;
-            conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, value));
+            if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+                const numValue = Number(col.filter);
+                if (!isNaN(numValue)) {
+                    let apiNotation = col.apiNotation;
+                    if (apiNotation === "statusId") {
+                        apiNotation = "status.statusId";
+                    }
+                    else if (apiNotation === "locationId") {
+                        apiNotation = "location.locationId";
+                    }
+                    conditionMapping.push((0, exports.convertColumnNotationToObject)(apiNotation, numValue));
+                }
+            }
         }
         else if (col.type === "precise") {
-            conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, col.filter));
+            if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+                conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, col.filter));
+            }
         }
         else if (col.type === "not" || col.type === "except") {
-            conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.ArrayOverlap)(col.filter)));
+            if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+                conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.ArrayOverlap)(col.filter)));
+            }
         }
         else if (col.type === "in" || col.type === "includes") {
-            conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.In)(col.filter)));
+            if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+                conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.In)(col.filter)));
+            }
         }
         else if (col.type === "null") {
             conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.IsNull)()));
         }
         else {
-            conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.ILike)(`%${col.filter}%`)));
+            const isNumericField = col.apiNotation && (col.apiNotation.toLowerCase().endsWith('id') ||
+                col.apiNotation.toLowerCase() === 'modelid' ||
+                col.apiNotation.toLowerCase() === 'locationid' ||
+                col.apiNotation.toLowerCase() === 'statusid');
+            if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+                if (isNumericField) {
+                    const numValue = Number(col.filter);
+                    if (!isNaN(numValue)) {
+                        let apiNotation = col.apiNotation;
+                        if (apiNotation === "statusId") {
+                            apiNotation = "status.statusId";
+                        }
+                        else if (apiNotation === "locationId") {
+                            apiNotation = "location.locationId";
+                        }
+                        conditionMapping.push((0, exports.convertColumnNotationToObject)(apiNotation, numValue));
+                    }
+                }
+                else {
+                    conditionMapping.push((0, exports.convertColumnNotationToObject)(col.apiNotation, (0, typeorm_1.ILike)(`%${col.filter}%`)));
+                }
+            }
         }
     }
     const newArr = [];
@@ -241,15 +282,7 @@ const getBill = (dueAmount, dueDate) => {
 };
 exports.getBill = getBill;
 const generateOTP = () => {
-    let otp;
-    const uniqueOTPs = new Set();
-    do {
-        otp = (0, crypto_1.randomInt)(100000, 1000000).toString();
-    } while (uniqueOTPs.has(otp));
-    uniqueOTPs.add(otp);
-    if (uniqueOTPs.size > 1000) {
-        uniqueOTPs.clear();
-    }
+    const otp = (0, crypto_1.randomInt)(100000, 1000000).toString();
     return otp;
 };
 exports.generateOTP = generateOTP;

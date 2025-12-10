@@ -5,6 +5,7 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
+  PrimaryColumn,
   PrimaryGeneratedColumn,
 } from "typeorm";
 import { EmployeeUsers } from "./EmployeeUsers";
@@ -16,7 +17,7 @@ import { Units } from "./Units";
 @Index("Locations_pkey", ["locationId"], { unique: true })
 @Entity("Locations", { schema: "dbo" })
 export class Locations {
-  @PrimaryGeneratedColumn({ type: "bigint", name: "LocationId" })
+  @PrimaryColumn({ type: "character varying", name: "LocationId" })
   locationId: string;
 
   @Column("character varying", { name: "LocationCode" })

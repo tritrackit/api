@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var EmployeeUserService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmployeeUserService = void 0;
 const common_1 = require("@nestjs/common");
@@ -26,12 +27,13 @@ const cloudinary_service_1 = require("./cloudinary.service");
 const File_1 = require("../db/entities/File");
 const cache_service_1 = require("./cache.service");
 const cache_constant_1 = require("../common/constant/cache.constant");
-let EmployeeUserService = class EmployeeUserService {
+let EmployeeUserService = EmployeeUserService_1 = class EmployeeUserService {
     constructor(employeeUserRepo, emailService, cloudinaryService, cacheService) {
         this.employeeUserRepo = employeeUserRepo;
         this.emailService = emailService;
         this.cloudinaryService = cloudinaryService;
         this.cacheService = cacheService;
+        this.logger = new common_1.Logger(EmployeeUserService_1.name);
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
         var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -331,7 +333,7 @@ let EmployeeUserService = class EmployeeUserService {
                         await this.cloudinaryService.deleteByPublicId((_c = employeeUser.pictureFile) === null || _c === void 0 ? void 0 : _c.publicId);
                     }
                     catch (ex) {
-                        console.log(ex);
+                        this.logger.warn(`Failed to delete old picture file: ${ex.message}`, ex.stack);
                     }
                 }
                 uploaded = await this.cloudinaryService.uploadDataUri(dto.pictureFile.data, dto.pictureFile.fileName, "model");
@@ -574,7 +576,7 @@ let EmployeeUserService = class EmployeeUserService {
         });
     }
 };
-EmployeeUserService = __decorate([
+EmployeeUserService = EmployeeUserService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(EmployeeUsers_1.EmployeeUsers)),
     __metadata("design:paramtypes", [typeorm_2.Repository,

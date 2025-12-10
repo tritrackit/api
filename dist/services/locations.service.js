@@ -17,9 +17,7 @@ const Locations_1 = require("../db/entities/Locations");
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const locations_constant_1 = require("../common/constant/locations.constant");
-const employee_user_error_constant_1 = require("../common/constant/employee-user-error.constant");
 const utils_1 = require("../common/utils/utils");
-const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
 const typeorm_2 = require("typeorm");
 const cache_constant_1 = require("../common/constant/cache.constant");
 const cache_service_1 = require("./cache.service");
@@ -29,16 +27,20 @@ let LocationsService = class LocationsService {
         this.cacheService = cacheService;
     }
     async getPagination({ pageSize, pageIndex, order, columnDef }) {
-        const key = cache_constant_1.CacheKeys.locations.list(pageIndex, pageSize, JSON.stringify(order), JSON.stringify(columnDef));
+        const key = cache_constant_1.CacheKeys.locations.list(pageSize, pageIndex, JSON.stringify(order), JSON.stringify(columnDef));
         const cached = this.cacheService.get(key);
         if (cached)
             return cached;
         const skip = Number(pageIndex) > 0 ? Number(pageIndex) * Number(pageSize) : 0;
         const take = Number(pageSize);
         const condition = (0, utils_1.columnDefToTypeORMCondition)(columnDef);
+        const fixedLocationCondition = {
+            locationId: (0, typeorm_2.In)(locations_constant_1.FIXED_LOCATION_IDS),
+            active: true
+        };
         const [results, total] = await Promise.all([
             this.locationsRepo.find({
-                where: Object.assign(Object.assign({}, condition), { active: true }),
+                where: Object.assign(Object.assign({}, condition), fixedLocationCondition),
                 relations: {
                     createdBy: true,
                     updatedBy: true,
@@ -48,7 +50,7 @@ let LocationsService = class LocationsService {
                 order,
             }),
             this.locationsRepo.count({
-                where: Object.assign(Object.assign({}, condition), { active: true }),
+                where: Object.assign(Object.assign({}, condition), fixedLocationCondition),
             }),
         ]);
         const response = {
@@ -67,6 +69,9 @@ let LocationsService = class LocationsService {
     }
     async getById(locationId) {
         var _a, _b, _c, _d, _e;
+        if (!locations_constant_1.FIXED_LOCATION_IDS.includes(locationId)) {
+            throw Error(locations_constant_1.LOCATIONS_ERROR_NOT_FOUND);
+        }
         const key = cache_constant_1.CacheKeys.locations.byId(locationId);
         const cached = this.cacheService.get(key);
         if (cached)
@@ -95,175 +100,33 @@ let LocationsService = class LocationsService {
         this.cacheService.set(key, result);
         return result;
     }
-    async create(dto, createdByUserId) {
-        try {
-            return await this.locationsRepo.manager.transaction(async (entityManager) => {
-                var _a, _b, _c, _d;
-                let location = new Locations_1.Locations();
-                location.locationCode = dto.locationCode;
-                location.name = dto.name;
-                location.dateCreated = await (0, utils_1.getDate)();
-                const createdByKey = cache_constant_1.CacheKeys.employeeUsers.byId(createdByUserId);
-                let createdBy = this.cacheService.get(createdByKey);
-                if (!createdBy) {
-                    createdBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                        where: {
-                            employeeUserId: createdByUserId,
-                            active: true,
-                        },
-                        relations: {
-                            role: true,
-                            createdBy: true,
-                            updatedBy: true,
-                            pictureFile: true,
-                        },
-                    });
-                    this.cacheService.set(createdByKey, createdBy);
-                }
-                if (!createdBy) {
-                    throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-                }
-                location.createdBy = Object.assign({}, createdBy);
-                delete location.createdBy.createdBy;
-                delete location.createdBy.updatedBy;
-                location = await entityManager.save(Locations_1.Locations, location);
-                (_a = location === null || location === void 0 ? void 0 : location.createdBy) === null || _a === void 0 ? true : delete _a.password;
-                (_b = location === null || location === void 0 ? void 0 : location.createdBy) === null || _b === void 0 ? true : delete _b.refreshToken;
-                (_c = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _c === void 0 ? true : delete _c.password;
-                (_d = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
-                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.locations.prefix);
-                return location;
-            });
-        }
-        catch (ex) {
-            if (ex["message"] &&
-                (ex["message"].includes("duplicate key") ||
-                    ex["message"].includes("violates unique constraint")) &&
-                ex["message"].includes("u_locations")) {
-                throw Error("Entry already exists!");
+    async getFixedLocation(locationType) {
+        const fixedLocation = locations_constant_1.FIXED_LOCATIONS[locationType];
+        const location = await this.locationsRepo.findOne({
+            where: {
+                locationId: fixedLocation.id,
+                active: true
             }
-            else {
-                throw ex;
-            }
-        }
-    }
-    async update(locationId, dto, updatedByUserId) {
-        try {
-            return await this.locationsRepo.manager.transaction(async (entityManager) => {
-                var _a, _b, _c, _d;
-                const locationKey = cache_constant_1.CacheKeys.locations.byId(locationId);
-                let location = this.cacheService.get(locationKey);
-                if (!location) {
-                    location = await entityManager.findOne(Locations_1.Locations, {
-                        where: {
-                            locationId,
-                            active: true,
-                        },
-                        relations: {
-                            createdBy: true,
-                            updatedBy: true,
-                        },
-                    });
-                }
-                if (!location) {
-                    throw Error(locations_constant_1.LOCATIONS_ERROR_NOT_FOUND);
-                }
-                location.locationCode = dto.locationCode;
-                location.name = dto.name;
-                location.lastUpdatedAt = await (0, utils_1.getDate)();
-                const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
-                let updatedBy = this.cacheService.get(updatedByKey);
-                if (!updatedBy) {
-                    updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                        where: {
-                            employeeUserId: updatedByUserId,
-                            active: true,
-                        },
-                        relations: {
-                            role: true,
-                            createdBy: true,
-                            updatedBy: true,
-                            pictureFile: true,
-                        },
-                    });
-                    this.cacheService.set(updatedByKey, updatedBy);
-                }
-                if (!updatedBy) {
-                    throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-                }
-                location.updatedBy = Object.assign({}, updatedBy);
-                location.updatedBy.createdBy;
-                location.updatedBy.updatedBy;
-                location = await entityManager.save(Locations_1.Locations, location);
-                (_a = location === null || location === void 0 ? void 0 : location.createdBy) === null || _a === void 0 ? true : delete _a.password;
-                (_b = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _b === void 0 ? true : delete _b.password;
-                (_c = location === null || location === void 0 ? void 0 : location.createdBy) === null || _c === void 0 ? true : delete _c.refreshToken;
-                (_d = location === null || location === void 0 ? void 0 : location.updatedBy) === null || _d === void 0 ? true : delete _d.refreshToken;
-                this.cacheService.del(cache_constant_1.CacheKeys.locations.byId(location === null || location === void 0 ? void 0 : location.locationId));
-                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.locations.prefix);
-                return location;
-            });
-        }
-        catch (ex) {
-            if (ex["message"] &&
-                (ex["message"].includes("duplicate key") ||
-                    ex["message"].includes("violates unique constraint")) &&
-                ex["message"].includes("u_locations")) {
-                throw Error("Entry already exists!");
-            }
-            else {
-                throw ex;
-            }
-        }
-    }
-    async delete(locationId, updatedByUserId) {
-        return await this.locationsRepo.manager.transaction(async (entityManager) => {
-            const locationKey = cache_constant_1.CacheKeys.locations.byId(locationId);
-            let location = this.cacheService.get(locationKey);
-            if (!location) {
-                location = await entityManager.findOne(Locations_1.Locations, {
-                    where: {
-                        locationId,
-                        active: true,
-                    },
-                    relations: {
-                        createdBy: true,
-                        updatedBy: true,
-                    },
-                });
-            }
-            if (!location) {
-                throw Error(locations_constant_1.LOCATIONS_ERROR_NOT_FOUND);
-            }
-            location.active = false;
-            location.lastUpdatedAt = await (0, utils_1.getDate)();
-            const updatedByKey = cache_constant_1.CacheKeys.employeeUsers.byId(updatedByUserId);
-            let updatedBy = this.cacheService.get(updatedByKey);
-            if (!updatedBy) {
-                updatedBy = await entityManager.findOne(EmployeeUsers_1.EmployeeUsers, {
-                    where: {
-                        employeeUserId: updatedByUserId,
-                        active: true,
-                    },
-                    relations: {
-                        role: true,
-                        createdBy: true,
-                        updatedBy: true,
-                        pictureFile: true,
-                    },
-                });
-                this.cacheService.set(updatedByKey, updatedBy);
-            }
-            if (!updatedBy) {
-                throw Error(employee_user_error_constant_1.EMPLOYEE_USER_ERROR_USER_NOT_FOUND);
-            }
-            location.updatedBy = Object.assign({}, updatedBy);
-            delete location.createdBy.createdBy;
-            delete location.createdBy.updatedBy;
-            this.cacheService.del(cache_constant_1.CacheKeys.locations.byId(location === null || location === void 0 ? void 0 : location.locationId));
-            this.cacheService.delByPrefix(cache_constant_1.CacheKeys.locations.prefix);
-            return await entityManager.save(Locations_1.Locations, location);
         });
+        if (!location) {
+            throw Error(`Fixed location "${fixedLocation.name}" not found. Run system reset.`);
+        }
+        return location;
+    }
+    async getAllFixedLocations() {
+        return await this.locationsRepo.find({
+            where: {
+                locationId: (0, typeorm_2.In)(locations_constant_1.FIXED_LOCATION_IDS),
+                active: true
+            },
+            order: { name: 'ASC' }
+        });
+    }
+    async getOpenArea() {
+        return await this.getFixedLocation('OPEN_AREA');
+    }
+    async getWarehouse5() {
+        return await this.getFixedLocation('WAREHOUSE_5');
     }
 };
 LocationsService = __decorate([

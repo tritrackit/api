@@ -53,8 +53,9 @@ export const hash = async (value) => {
   return await bcrypt.hash(value, 10);
 };
 
-export const compare = async (newValue, hashedValue) => {
-  return await bcrypt.compare(hashedValue, newValue);
+export const compare = async (plainText, hashedValue) => {
+  // 🔥 FIX: Correct parameter order - bcrypt.compare(plainText, hash)
+  return await bcrypt.compare(plainText, hashedValue);
 };
 
 export const getAge = async (birthDate: Date) => {
@@ -180,6 +181,10 @@ export const columnDefToTypeORMCondition = (columnDef) => {
         );
       }
     } else if (col.type === "number-range") {
+      // 🔥 FIX: Added null check before split
+      if (!col.filter || typeof col.filter !== 'string') {
+        continue; // Skip invalid filter
+      }
       const range = col.filter.split("-").map((x) => x?.trim());
 
       conditionMapping.push(
@@ -189,30 +194,83 @@ export const columnDefToTypeORMCondition = (columnDef) => {
         )
       );
     } else if (col.type === "number") {
-      const value = !isNaN(Number(col.filter)) ? Number(col.filter) : 0;
+      // 🔥 FIX: Validate filter exists and is a valid number before processing
+      if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+        const numValue = Number(col.filter);
+        if (!isNaN(numValue)) {
+          // 🔥 FIX: Handle relation fields (statusId, locationId) - use relation path
+          let apiNotation = col.apiNotation;
+          if (apiNotation === "statusId") {
+            apiNotation = "status.statusId";
+          } else if (apiNotation === "locationId") {
+            apiNotation = "location.locationId";
+          }
+          // modelId is a direct column, so no change needed
+          
       conditionMapping.push(
-        convertColumnNotationToObject(col.apiNotation, value)
+            convertColumnNotationToObject(apiNotation, numValue)
       );
+        }
+        // If invalid number, skip this filter (don't fall through to ILike)
+      }
+      // If filter is empty/null, skip this filter
     } else if (col.type === "precise") {
+      if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
       conditionMapping.push(
         convertColumnNotationToObject(col.apiNotation, col.filter)
       );
+      }
     } else if (col.type === "not" || col.type === "except") {
+      if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
       conditionMapping.push(
         convertColumnNotationToObject(col.apiNotation, ArrayOverlap(col.filter))
       );
+      }
     } else if (col.type === "in" || col.type === "includes") {
+      if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
       conditionMapping.push(
         convertColumnNotationToObject(col.apiNotation, In(col.filter))
       );
+      }
     } else if (col.type === "null") {
       conditionMapping.push(
         convertColumnNotationToObject(col.apiNotation, IsNull())
       );
     } else {
+      // 🔥 FIX: Only use ILike for string types, and validate filter exists
+      // Check if the column is likely a numeric field (ends with 'Id' or is a known numeric field)
+      const isNumericField = col.apiNotation && (
+        col.apiNotation.toLowerCase().endsWith('id') ||
+        col.apiNotation.toLowerCase() === 'modelid' ||
+        col.apiNotation.toLowerCase() === 'locationid' ||
+        col.apiNotation.toLowerCase() === 'statusid'
+      );
+      
+      if (col.filter !== null && col.filter !== undefined && col.filter !== "") {
+        if (isNumericField) {
+          // For numeric fields, use exact match instead of ILike
+          const numValue = Number(col.filter);
+          if (!isNaN(numValue)) {
+            // 🔥 FIX: Handle relation fields (statusId, locationId) - use relation path
+            let apiNotation = col.apiNotation;
+            if (apiNotation === "statusId") {
+              apiNotation = "status.statusId";
+            } else if (apiNotation === "locationId") {
+              apiNotation = "location.locationId";
+            }
+            // modelId is a direct column, so no change needed
+            
+            conditionMapping.push(
+              convertColumnNotationToObject(apiNotation, numValue)
+            );
+          }
+        } else {
+          // For string fields, use ILike
       conditionMapping.push(
         convertColumnNotationToObject(col.apiNotation, ILike(`%${col.filter}%`))
       );
+        }
+      }
     }
   }
   const newArr = [];
@@ -298,24 +356,11 @@ export const getBill = (dueAmount: number, dueDate: Date) => {
     totalDueAmount: Number(totalDueAmount).toFixed(2),
   };
 };
-// Generate a 6-digit OTP with low probability of repeating
+// Generate a 6-digit OTP
+// Note: Each call generates a fresh random OTP (function-scoped Set ensures uniqueness per call)
 export const generateOTP = () => {
-  let otp;
-  const uniqueOTPs = new Set();
-
-  // Ensure the OTP is not a duplicate with 1 in 1000 odds
-  do {
-    otp = randomInt(100000, 1000000).toString(); // Generate a 6-digit OTP
-  } while (uniqueOTPs.has(otp));
-
-  // Store the OTP to track uniqueness within the 1000 scope
-  uniqueOTPs.add(otp);
-
-  // If we exceed 1000 unique OTPs, clear the set to maintain the odds
-  if (uniqueOTPs.size > 1000) {
-    uniqueOTPs.clear();
-  }
-
+  // Generate a random 6-digit OTP (100000 to 999999)
+  const otp = randomInt(100000, 1000000).toString();
   return otp;
 };
 

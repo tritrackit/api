@@ -8,8 +8,12 @@ import { UnitLogs } from "src/db/entities/UnitLogs";
 export declare class UnitsController {
     private readonly unitsService;
     constructor(unitsService: UnitsService);
+    getActivityHistory(unitCode: string, pageSize?: string, pageIndex?: string): Promise<ApiResponseModel<{
+        results: UnitLogs[];
+        total: number;
+    }>>;
     getByCode(unitCode: string): Promise<ApiResponseModel<Units>>;
-    getPaginated(params?: {
+    getPaginated(params: {
         pageSize: string;
         pageIndex: string;
         order: any;
@@ -19,7 +23,19 @@ export declare class UnitsController {
         total: number;
     }>>;
     create(accessDto: CreateUnitDto, userId: string): Promise<ApiResponseModel<Units>>;
-    update(unitId: string, dto: UpdateUnitDto, userId: string): Promise<ApiResponseModel<Units>>;
-    delete(unitId: string, userId: string): Promise<ApiResponseModel<Units>>;
+    update(unitCode: string, dto: UpdateUnitDto, userId: string): Promise<ApiResponseModel<Units>>;
+    delete(unitCode: string, userId: string): Promise<ApiResponseModel<Units>>;
     unitLogs(dto: LogsDto, req: any): Promise<ApiResponseModel<UnitLogs[]>>;
+    registerUnit(dto: {
+        scannerCode: string;
+        rfid: string;
+        chassisNo?: string;
+        color?: string;
+        description?: string;
+        modelId?: string;
+    }): Promise<ApiResponseModel<any>>;
+    updateUnitLocation(dto: {
+        scannerCode: string;
+        rfid: string;
+    }): Promise<ApiResponseModel<any>>;
 }

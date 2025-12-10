@@ -4,6 +4,7 @@ import { Status } from "./Status";
 export declare class Scanner {
     scannerId: string;
     scannerCode: string;
+    scannerType: string;
     name: string;
     locationId: string;
     dateCreated: Date;

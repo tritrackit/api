@@ -25,6 +25,7 @@ const Status_1 = require("../entities/Status");
 const File_1 = require("../entities/File");
 let TypeOrmConfigService = class TypeOrmConfigService {
     createTypeOrmOptions() {
+        var _a, _b;
         const ssl = this.config.get("SSL");
         const config = {
             type: "postgres",
@@ -47,7 +48,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 Units_1.Units,
             ],
             synchronize: false,
-            ssl: ssl.toLocaleLowerCase().includes("true"),
+            ssl: (_b = (_a = ssl === null || ssl === void 0 ? void 0 : ssl.toLowerCase()) === null || _a === void 0 ? void 0 : _a.includes("true")) !== null && _b !== void 0 ? _b : false,
             extra: {
                 timezone: "UTC",
             },

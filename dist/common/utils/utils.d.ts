@@ -922,7 +922,7 @@ export declare const getDbConnectionOptions: (connectionName?: string) => Promis
 export declare const getDbConnection: (connectionName?: string) => Promise<import("typeorm").DataSource>;
 export declare const runDbMigrations: (connectionName?: string) => Promise<void>;
 export declare const hash: (value: any) => Promise<any>;
-export declare const compare: (newValue: any, hashedValue: any) => Promise<any>;
+export declare const compare: (plainText: any, hashedValue: any) => Promise<any>;
 export declare const getAge: (birthDate: Date) => Promise<number>;
 export declare const addHours: (numOfHours: any, date: Date) => Date;
 export declare const round: (number: any) => number;
@@ -944,7 +944,7 @@ export declare const getBill: (dueAmount: number, dueDate: Date) => {
     overdueCharge: string;
     totalDueAmount: string;
 };
-export declare const generateOTP: () => any;
+export declare const generateOTP: () => string;
 export declare const toCamelCase: (str: any) => any;
 export declare const toPascalCase: (str: any) => any;
 export declare const getDate: () => Promise<any>;

@@ -23,6 +23,7 @@ const Scanner_1 = require("../db/entities/Scanner");
 const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
 const typeorm_2 = require("typeorm");
 const locations_constant_1 = require("../common/constant/locations.constant");
+const status_constants_1 = require("../common/constant/status.constants");
 const Status_1 = require("../db/entities/Status");
 const cache_service_1 = require("./cache.service");
 const cache_constant_1 = require("../common/constant/cache.constant");
@@ -143,6 +144,7 @@ let ScannerService = class ScannerService {
                 scanner.scannerCode = dto.scannerCode;
                 scanner.name = dto.name;
                 scanner.dateCreated = await (0, utils_1.getDate)();
+                scanner.scannerType = dto.scannerType || "LOCATION";
                 const statusKey = cache_constant_1.CacheKeys.status.byId(dto.statusId);
                 let status = this.cacheService.get(statusKey);
                 if (!status) {
@@ -154,7 +156,7 @@ let ScannerService = class ScannerService {
                     this.cacheService.set(statusKey, status);
                 }
                 if (!status) {
-                    throw Error(locations_constant_1.LOCATIONS_ERROR_NOT_FOUND);
+                    throw Error(status_constants_1.STATUS_ERROR_NOT_FOUND);
                 }
                 scanner.status = status;
                 const locationKey = cache_constant_1.CacheKeys.locations.byId(dto.locationId);
@@ -301,6 +303,7 @@ let ScannerService = class ScannerService {
                 delete scanner.updatedBy.updatedBy;
                 scanner.scannerCode = dto.scannerCode;
                 scanner.name = dto.name;
+                scanner.scannerType = dto.scannerType || scanner.scannerType;
                 const statusKey = cache_constant_1.CacheKeys.status.byId(dto.statusId);
                 let status = this.cacheService.get(statusKey);
                 if (!status) {
@@ -312,7 +315,7 @@ let ScannerService = class ScannerService {
                     this.cacheService.set(statusKey, status);
                 }
                 if (!status) {
-                    throw Error(locations_constant_1.LOCATIONS_ERROR_NOT_FOUND);
+                    throw Error(status_constants_1.STATUS_ERROR_NOT_FOUND);
                 }
                 scanner.status = status;
                 const locationKey = cache_constant_1.CacheKeys.locations.byId(dto.locationId);
@@ -381,6 +384,29 @@ let ScannerService = class ScannerService {
                 throw ex;
             }
         }
+    }
+    async getScannersByType(scannerType) {
+        const results = await this.scannerRepo.find({
+            where: {
+                scannerType,
+                active: true
+            },
+            relations: {
+                location: true,
+                status: true,
+                assignedEmployeeUser: true
+            }
+        });
+        return results.map(scanner => {
+            var _a, _b, _c, _d, _e, _f;
+            (_a = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _a === void 0 ? true : delete _a.password;
+            (_b = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _b === void 0 ? true : delete _b.refreshToken;
+            (_c = scanner === null || scanner === void 0 ? void 0 : scanner.createdBy) === null || _c === void 0 ? true : delete _c.password;
+            (_d = scanner === null || scanner === void 0 ? void 0 : scanner.createdBy) === null || _d === void 0 ? true : delete _d.refreshToken;
+            (_e = scanner === null || scanner === void 0 ? void 0 : scanner.updatedBy) === null || _e === void 0 ? true : delete _e.password;
+            (_f = scanner === null || scanner === void 0 ? void 0 : scanner.updatedBy) === null || _f === void 0 ? true : delete _f.refreshToken;
+            return scanner;
+        });
     }
     async delete(scannerCode, updatedByUserId) {
         return await this.scannerRepo.manager.transaction(async (entityManager) => {

@@ -15,6 +15,7 @@ import { Scanner } from "src/db/entities/Scanner";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Repository } from "typeorm";
 import { LOCATIONS_ERROR_NOT_FOUND } from "src/common/constant/locations.constant";
+import { STATUS_ERROR_NOT_FOUND } from "src/common/constant/status.constants";
 import { Status } from "src/db/entities/Status";
 import { CacheService } from "./cache.service";
 import { CacheKeys } from "src/common/constant/cache.constant";
@@ -153,6 +154,7 @@ export class ScannerService {
           scanner.scannerCode = dto.scannerCode;
           scanner.name = dto.name;
           scanner.dateCreated = await getDate();
+          scanner.scannerType = dto.scannerType || "LOCATION";
 
           const statusKey = CacheKeys.status.byId(dto.statusId);
           let status = this.cacheService.get<Status>(statusKey);
@@ -165,7 +167,7 @@ export class ScannerService {
             this.cacheService.set(statusKey, status);
           }
           if (!status) {
-            throw Error(LOCATIONS_ERROR_NOT_FOUND);
+            throw Error(STATUS_ERROR_NOT_FOUND);
           }
           scanner.status = status;
 
@@ -335,6 +337,7 @@ export class ScannerService {
 
           scanner.scannerCode = dto.scannerCode;
           scanner.name = dto.name;
+          scanner.scannerType = dto.scannerType || scanner.scannerType; 
 
           const statusKey = CacheKeys.status.byId(dto.statusId);
           let status = this.cacheService.get<Status>(statusKey);
@@ -347,7 +350,7 @@ export class ScannerService {
             this.cacheService.set(statusKey, status);
           }
           if (!status) {
-            throw Error(LOCATIONS_ERROR_NOT_FOUND);
+            throw Error(STATUS_ERROR_NOT_FOUND);
           }
           scanner.status = status;
 
@@ -430,6 +433,30 @@ export class ScannerService {
         throw ex;
       }
     }
+  }
+
+  async getScannersByType(scannerType: string) {
+    const results = await this.scannerRepo.find({
+      where: {
+        scannerType,
+        active: true
+      },
+      relations: {
+        location: true,
+        status: true,
+        assignedEmployeeUser: true
+      }
+    });
+
+    return results.map(scanner => {
+      delete scanner?.assignedEmployeeUser?.password;
+      delete scanner?.assignedEmployeeUser?.refreshToken;
+      delete scanner?.createdBy?.password;
+      delete scanner?.createdBy?.refreshToken;
+      delete scanner?.updatedBy?.password;
+      delete scanner?.updatedBy?.refreshToken;
+      return scanner;
+    });
   }
 
   async delete(scannerCode, updatedByUserId: string) {

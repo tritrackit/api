@@ -53,7 +53,7 @@ let AuthService = class AuthService {
             if (!employeeUser) {
                 throw Error(auth_error_constant_1.LOGIN_ERROR_USER_NOT_FOUND);
             }
-            const passwordMatch = await (0, utils_1.compare)(employeeUser.password, password);
+            const passwordMatch = await (0, utils_1.compare)(password, employeeUser.password);
             if (!passwordMatch) {
                 throw Error(auth_error_constant_1.LOGIN_ERROR_PASSWORD_INCORRECT);
             }

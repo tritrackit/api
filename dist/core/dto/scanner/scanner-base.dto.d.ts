@@ -4,4 +4,5 @@ export declare class DefaultScannerDto {
     assignedEmployeeUserId: string;
     statusId: string;
     locationId: string;
+    scannerType?: "REGISTRATION" | "LOCATION";
 }

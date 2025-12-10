@@ -1,3 +1,9 @@
-import { DefaultScannerDto } from "./scanner-base.dto";
-export declare class UpdateScannerDto extends DefaultScannerDto {
+export declare class UpdateScannerDto {
+    scannerCode?: string;
+    name?: string;
+    scannerType?: string;
+    locationId?: string;
+    statusId?: string;
+    assignedEmployeeUserId?: string;
+    active?: boolean;
 }

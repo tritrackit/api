@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { extname } from "path";
 import { LOGIN_ERROR_PASSWORD_INCORRECT } from "src/common/constant/auth-error.constant";
@@ -34,10 +34,12 @@ import { CloudinaryService } from "./cloudinary.service";
 import { File } from "src/db/entities/File";
 import { CacheService } from "./cache.service";
 import { CacheKeys } from "src/common/constant/cache.constant";
-import { last } from "rxjs";
+// 🔥 FIX: Removed unused 'last' import from rxjs
 
 @Injectable()
 export class EmployeeUserService {
+  private readonly logger = new Logger(EmployeeUserService.name);
+
   constructor(
     @InjectRepository(EmployeeUsers)
     private readonly employeeUserRepo: Repository<EmployeeUsers>,
@@ -425,7 +427,7 @@ export class EmployeeUserService {
                 employeeUser.pictureFile?.publicId
               );
             } catch (ex) {
-              console.log(ex);
+              this.logger.warn(`Failed to delete old picture file: ${ex.message}`, ex.stack);
             }
           }
           uploaded = await this.cloudinaryService.uploadDataUri(

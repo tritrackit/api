@@ -16,16 +16,15 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_service_1 = require("./db/typeorm/typeorm.service");
 const config_1 = require("@nestjs/config");
 const auth_module_1 = require("./controller/auth/auth.module");
-const utils_1 = require("./common/utils/utils");
 const role_module_1 = require("./controller/role/role.module");
 const employee_user_module_1 = require("./controller/employee-user/employee-user.module");
 const model_module_1 = require("./controller/model/model.module");
 const scanner_module_1 = require("./controller/scanner/scanner.module");
 const locations_module_1 = require("./controller/locations/locations.module");
 const units_module_1 = require("./controller/unit/units.module");
+const statistics_module_1 = require("./controller/statistics/statistics.module");
 const cache_service_1 = require("./services/cache.service");
 const cache_module_1 = require("./core/cache/cache.module");
-const envFilePath = (0, utils_1.getEnvPath)(`${__dirname}/envs`);
 let AppModule = class AppModule {
     constructor(cache) {
         this.cache = cache;
@@ -39,7 +38,10 @@ AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             config_1.ConfigModule.forRoot({
-                envFilePath,
+                envFilePath: [
+                    `envs/${process.env.NODE_ENV || 'development'}.env`,
+                    'envs/.env',
+                ],
                 isGlobal: true,
             }),
             typeorm_1.TypeOrmModule.forRootAsync({ useClass: typeorm_service_1.TypeOrmConfigService }),
@@ -50,6 +52,7 @@ AppModule = __decorate([
             scanner_module_1.ScannerModule,
             locations_module_1.LocationsModule,
             units_module_1.UnitsModule,
+            statistics_module_1.StatisticsModule,
             cache_module_1.CacheModule
         ],
         providers: [app_service_1.AppService, cache_service_1.CacheService],

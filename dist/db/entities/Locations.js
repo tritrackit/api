@@ -18,7 +18,7 @@ const Units_1 = require("./Units");
 let Locations = class Locations {
 };
 __decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)({ type: "bigint", name: "LocationId" }),
+    (0, typeorm_1.PrimaryColumn)({ type: "character varying", name: "LocationId" }),
     __metadata("design:type", String)
 ], Locations.prototype, "locationId", void 0);
 __decorate([

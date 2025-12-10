@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var EmailService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmailService = void 0;
 const common_1 = require("@nestjs/common");
@@ -19,9 +20,10 @@ const promises_1 = require("fs/promises");
 const config_1 = require("@nestjs/config");
 const path_1 = __importDefault(require("path"));
 const utils_1 = require("../common/utils/utils");
-let EmailService = class EmailService {
+let EmailService = EmailService_1 = class EmailService {
     constructor(config) {
         this.config = config;
+        this.logger = new common_1.Logger(EmailService_1.name);
     }
     async sendEmailVerification(recipient, otp) {
         try {
@@ -54,8 +56,11 @@ let EmailService = class EmailService {
                 subject: evSubject,
                 html: emailTemplate,
             });
-            console.log("Message sent: %s", info.messageId);
-            console.log("Preview URL: %s", nodemailer_1.default.getTestMessageUrl(info));
+            this.logger.log(`Message sent: ${info.messageId}`);
+            const previewUrl = nodemailer_1.default.getTestMessageUrl(info);
+            if (previewUrl) {
+                this.logger.debug(`Preview URL: ${previewUrl}`);
+            }
             return true;
         }
         catch (ex) {
@@ -90,8 +95,11 @@ let EmailService = class EmailService {
                 subject: evSubject,
                 html: emailTemplate,
             });
-            console.log("Message sent: %s", info.messageId);
-            console.log("Preview URL: %s", nodemailer_1.default.getTestMessageUrl(info));
+            this.logger.log(`Message sent: ${info.messageId}`);
+            const previewUrl = nodemailer_1.default.getTestMessageUrl(info);
+            if (previewUrl) {
+                this.logger.debug(`Preview URL: ${previewUrl}`);
+            }
             return true;
         }
         catch (ex) {
@@ -99,7 +107,7 @@ let EmailService = class EmailService {
         }
     }
 };
-EmailService = __decorate([
+EmailService = EmailService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService])
 ], EmailService);

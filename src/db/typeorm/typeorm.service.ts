@@ -1,7 +1,7 @@
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { Injectable, Inject } from "@nestjs/common";
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { Roles } from "../entities/Roles";
 import { SystemConfig } from "../entities/SystemConfig";
 import { EmployeeUsers } from "../entities/EmployeeUsers";
@@ -44,7 +44,8 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         Units,
       ],
       synchronize: false, // never use TRUE in production!
-      ssl: ssl.toLocaleLowerCase().includes("true"),
+      // 🔥 FIX: Fixed typo and added null check
+      ssl: ssl?.toLowerCase()?.includes("true") ?? false,
       extra: {
         timezone: "UTC", // or use "UTC" if you prefer UTC normalization
       },

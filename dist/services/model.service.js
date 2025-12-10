@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ModelService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModelService = void 0;
 const common_1 = require("@nestjs/common");
@@ -28,12 +29,13 @@ const utils_2 = require("../common/utils/utils");
 const cloudinary_service_1 = require("./cloudinary.service");
 const cache_constant_1 = require("../common/constant/cache.constant");
 const cache_service_1 = require("./cache.service");
-let ModelService = class ModelService {
+let ModelService = ModelService_1 = class ModelService {
     constructor(firebaseProvider, modelRepo, cloudinaryService, cacheService) {
         this.firebaseProvider = firebaseProvider;
         this.modelRepo = modelRepo;
         this.cloudinaryService = cloudinaryService;
         this.cacheService = cacheService;
+        this.logger = new common_1.Logger(ModelService_1.name);
     }
     async getPagination({ pageSize, pageIndex, order, keywords }) {
         const key = cache_constant_1.CacheKeys.model.list(pageIndex, pageSize, JSON.stringify(order), JSON.stringify(keywords));
@@ -257,7 +259,7 @@ let ModelService = class ModelService {
                             await this.cloudinaryService.deleteByPublicId((_a = model.thumbnailFile) === null || _a === void 0 ? void 0 : _a.publicId);
                         }
                         catch (ex) {
-                            console.log(ex);
+                            this.logger.warn(`Failed to delete old thumbnail file: ${ex.message}`, ex.stack);
                         }
                     }
                     uploaded = await this.cloudinaryService.uploadDataUri(dto.thumbnailFile.data, dto.thumbnailFile.fileName, "model");
@@ -405,7 +407,7 @@ let ModelService = class ModelService {
                 });
             }
             catch (ex) {
-                console.error("Error updating order:", ex);
+                this.logger.error(`Error updating order: ${ex.message}`, ex.stack);
                 throw ex;
             }
         });
@@ -459,7 +461,7 @@ let ModelService = class ModelService {
                     await this.cloudinaryService.deleteByPublicId((_c = model.thumbnailFile) === null || _c === void 0 ? void 0 : _c.publicId);
                 }
                 catch (ex) {
-                    console.log(ex);
+                    this.logger.warn(`Failed to delete thumbnail file: ${ex.message}`, ex.stack);
                 }
             }
             model = await entityManager.save(Model_1.Model, model);
@@ -473,7 +475,7 @@ let ModelService = class ModelService {
         });
     }
 };
-ModelService = __decorate([
+ModelService = ModelService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(1, (0, typeorm_1.InjectRepository)(Model_1.Model)),
     __metadata("design:paramtypes", [firebase_provider_1.FirebaseProvider,

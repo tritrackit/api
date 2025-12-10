@@ -10,6 +10,7 @@ export declare class EmployeeUserService {
     private readonly emailService;
     private readonly cloudinaryService;
     private readonly cacheService;
+    private readonly logger;
     constructor(employeeUserRepo: Repository<EmployeeUsers>, emailService: EmailService, cloudinaryService: CloudinaryService, cacheService: CacheService);
     getPagination({ pageSize, pageIndex, order, columnDef }: {
         pageSize: any;

@@ -1,6 +1,5 @@
 import { Locations } from "src/db/entities/Locations";
-import { CreateLocationsDto } from "src/core/dto/locations/locations.create.dto";
-import { UpdateLocationsDto } from "src/core/dto/locations/locations.update.dto";
+import { FIXED_LOCATIONS } from "src/common/constant/locations.constant";
 import { Repository } from "typeorm";
 import { CacheService } from "./cache.service";
 export declare class LocationsService {
@@ -17,7 +16,8 @@ export declare class LocationsService {
         total: number;
     }>;
     getById(locationId: any): Promise<Locations>;
-    create(dto: CreateLocationsDto, createdByUserId: string): Promise<Locations>;
-    update(locationId: any, dto: UpdateLocationsDto, updatedByUserId: string): Promise<Locations>;
-    delete(locationId: any, updatedByUserId: string): Promise<Locations>;
+    getFixedLocation(locationType: keyof typeof FIXED_LOCATIONS): Promise<Locations>;
+    getAllFixedLocations(): Promise<Locations[]>;
+    getOpenArea(): Promise<Locations>;
+    getWarehouse5(): Promise<Locations>;
 }

@@ -2,7 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 import { ConfigService } from "@nestjs/config";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, Logger } from "@nestjs/common";
 import * as bodyParser from "body-parser";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { DataSource } from "typeorm";
@@ -19,9 +19,10 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix("api/v1");
-  // the next two lines did the trick
+  
   app.use(bodyParser.json({ limit: "50mb" }));
   app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
+  
   const config: ConfigService = app.get(ConfigService);
   const port: number = config.get<number>("PORT");
   const options = new DocumentBuilder()
@@ -34,9 +35,6 @@ async function bootstrap() {
     )
     .addApiKey({ type: "apiKey", in: "header", name: "X-API-Key" }, "apiKey")
     .build();
-  // the next two lines did the trick
-  app.use(bodyParser.json({ limit: "50mb" }));
-  app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup("swagger", app, document, {
     swaggerOptions: { defaultModelsExpandDepth: -1 },
@@ -54,8 +52,9 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   const dataSource = app.get(DataSource);
   TypeOrmConfigService.dataSource = dataSource; // ✅ store it here
-  await app.listen(port, () => {
-    console.log("[WEB]", config.get<string>("BASE_URL") + "/swagger");
+  const logger = new Logger('Bootstrap');
+  await app.listen(port, '0.0.0.0', () => {
+    logger.log(`Swagger documentation available at ${config.get<string>("BASE_URL")}/swagger`);
   });
 }
 bootstrap();

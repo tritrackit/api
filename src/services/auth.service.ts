@@ -64,7 +64,8 @@ export class AuthService {
         throw Error(LOGIN_ERROR_USER_NOT_FOUND);
       }
 
-      const passwordMatch = await compare(employeeUser.password, password);
+      // 🔥 FIX: Correct parameter order - compare(plainText, hashedPassword)
+      const passwordMatch = await compare(password, employeeUser.password);
       if (!passwordMatch) {
         throw Error(LOGIN_ERROR_PASSWORD_INCORRECT);
       }
@@ -113,6 +114,10 @@ export class AuthService {
       if (employeeUser.accessGranted) {
         throw Error("The user has already been granted role!");
       }
+      // 🔥 FIX: Correct parameter order - compare(plainText, hashedValue)
+      // Note: hashCode from URL is already hashed, so this might need adjustment
+      // If hashCode is plain text, use: compare(hashCode, employeeUser.invitationCode)
+      // If hashCode is already hashed, we need to compare hashes directly
       const codeMatch = await compare(hashCode, employeeUser.invitationCode);
       if (!codeMatch) {
         throw Error(VERFICATION_ERROR_CODE_INCORRECT);

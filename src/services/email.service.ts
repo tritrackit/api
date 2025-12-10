@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import nodemailer from "nodemailer";
 import { readFile } from "fs/promises"; // ES6 import for file system access
 import { ConfigService } from "@nestjs/config";
@@ -7,6 +7,8 @@ import { hash } from "src/common/utils/utils";
 
 @Injectable()
 export class EmailService {
+  private readonly logger = new Logger(EmailService.name);
+
   constructor(private readonly config: ConfigService) {}
 
   async sendEmailVerification(recipient, otp) {
@@ -54,8 +56,11 @@ export class EmailService {
         html: emailTemplate, // HTML body
       });
 
-      console.log("Message sent: %s", info.messageId);
-      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      this.logger.log(`Message sent: ${info.messageId}`);
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        this.logger.debug(`Preview URL: ${previewUrl}`);
+      }
       return true;
     } catch (ex) {
       throw ex;
@@ -100,8 +105,11 @@ export class EmailService {
         html: emailTemplate, // HTML body
       });
 
-      console.log("Message sent: %s", info.messageId);
-      console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+      this.logger.log(`Message sent: ${info.messageId}`);
+      const previewUrl = nodemailer.getTestMessageUrl(info);
+      if (previewUrl) {
+        this.logger.debug(`Preview URL: ${previewUrl}`);
+      }
       return true;
     } catch (ex) {
       throw ex;

@@ -1,10 +1,10 @@
+// src/core/dto/scanner/scanner-base.dto.ts
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, Matches, MaxLength, MinLength } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class DefaultScannerDto {
   @ApiProperty({
-    description:
-      "Must start with an uppercase letter or number. Can only include letters, numbers, underscore (_) or dash (-). No spaces. Max 20 characters.",
+    description: "Scanner code",
     example: "SCAN_001",
   })
   @IsNotEmpty()
@@ -31,4 +31,14 @@ export class DefaultScannerDto {
   @ApiProperty()
   @IsNotEmpty()
   locationId: string;
+
+  @ApiProperty({
+    description: "Scanner type - REGISTRATION or LOCATION",
+    enum: ["REGISTRATION", "LOCATION"],
+    default: "LOCATION",
+    example: "LOCATION"
+  })
+  @IsOptional() // Optional in base
+  @IsString()
+  scannerType?: "REGISTRATION" | "LOCATION"; // Optional with ?
 }

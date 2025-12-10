@@ -1,13 +1,16 @@
-[
-  {
-    "name": "default",
-    "type": "mssql",
-    "host": "localhost",
-    "port": 1433,
-    "username": "sa",
-    "password": "admin123",
-    "database": "",
-    "synchronize": true,
-    "entities": ["entities/*.js"]
+{
+  "name": "default",
+  "type": "mssql",
+  "host": "localhost",
+  "port": 1433,
+  "username": "sa",
+  "password": "Admin123!",
+  "database": "tritrackitdb",
+  "synchronize": true,
+  "entities": ["src/db/entities/*.ts"],
+  "options": {
+    "enableArithAbort": true,
+    "trustServerCertificate": true,
+    "encrypt": false
   }
-]
+}

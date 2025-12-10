@@ -25,11 +25,18 @@ __decorate([
     __metadata("design:type", String)
 ], Scanner.prototype, "scannerCode", void 0);
 __decorate([
+    (0, typeorm_1.Column)("character varying", {
+        name: "ScannerType",
+        default: "LOCATION"
+    }),
+    __metadata("design:type", String)
+], Scanner.prototype, "scannerType", void 0);
+__decorate([
     (0, typeorm_1.Column)("character varying", { name: "Name" }),
     __metadata("design:type", String)
 ], Scanner.prototype, "name", void 0);
 __decorate([
-    (0, typeorm_1.Column)("bigint", { name: "LocationId" }),
+    (0, typeorm_1.Column)("character varying", { name: "LocationId" }),
     __metadata("design:type", String)
 ], Scanner.prototype, "locationId", void 0);
 __decorate([

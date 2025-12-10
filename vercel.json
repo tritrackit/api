@@ -1,5 +1,8 @@
 {
     "version": 2,
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
+    "framework": null,
     "builds": [
         {
             "src": "dist/main.js",
@@ -10,9 +13,11 @@
         {
             "src": "/(.*)",
             "dest": "dist/main.js",
-            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "PATCH", "OPTIONS"],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             "headers": {
-              "Access-Control-Allow-Origin": "*"
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
             }
         }
     ]

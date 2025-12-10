@@ -26,10 +26,17 @@ export class Scanner {
   @Column("character varying", { name: "ScannerCode" })
   scannerCode: string;
 
+  @Column("character varying", { 
+    name: "ScannerType", 
+    default: "LOCATION" // REGISTRATION or LOCATION
+  })
+  scannerType: string;
+
+
   @Column("character varying", { name: "Name" })
   name: string;
 
-  @Column("bigint", { name: "LocationId" })
+  @Column("character varying", { name: "LocationId" })
   locationId: string;
 
   @Column("timestamp with time zone", {

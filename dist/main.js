@@ -52,8 +52,6 @@ async function bootstrap() {
         .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "JWT", in: "header" }, "jwt")
         .addApiKey({ type: "apiKey", in: "header", name: "X-API-Key" }, "apiKey")
         .build();
-    app.use(bodyParser.json({ limit: "50mb" }));
-    app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
     const document = swagger_1.SwaggerModule.createDocument(app, options);
     swagger_1.SwaggerModule.setup("swagger", app, document, {
         swaggerOptions: { defaultModelsExpandDepth: -1 },
@@ -71,8 +69,9 @@ async function bootstrap() {
     app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, transform: true }));
     const dataSource = app.get(typeorm_1.DataSource);
     typeorm_service_1.TypeOrmConfigService.dataSource = dataSource;
-    await app.listen(port, () => {
-        console.log("[WEB]", config.get("BASE_URL") + "/swagger");
+    const logger = new common_1.Logger('Bootstrap');
+    await app.listen(port, '0.0.0.0', () => {
+        logger.log(`Swagger documentation available at ${config.get("BASE_URL")}/swagger`);
     });
 }
 bootstrap();

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { extname } from "path";
 import {
@@ -24,6 +24,8 @@ import { CacheService } from "./cache.service";
 
 @Injectable()
 export class ModelService {
+  private readonly logger = new Logger(ModelService.name);
+
   constructor(
     private firebaseProvider: FirebaseProvider,
     @InjectRepository(Model)
@@ -296,7 +298,7 @@ export class ModelService {
                 model.thumbnailFile?.publicId
               );
             } catch (ex) {
-              console.log(ex);
+              this.logger.warn(`Failed to delete old thumbnail file: ${ex.message}`, ex.stack);
             }
           }
           uploaded = await this.cloudinaryService.uploadDataUri(
@@ -476,7 +478,7 @@ export class ModelService {
         });
         // Invalidate caches
       } catch (ex) {
-        console.error("Error updating order:", ex);
+        this.logger.error(`Error updating order: ${ex.message}`, ex.stack);
         throw ex;
       }
     });
@@ -533,7 +535,7 @@ export class ModelService {
             model.thumbnailFile?.publicId
           );
         } catch (ex) {
-          console.log(ex);
+          this.logger.warn(`Failed to delete thumbnail file: ${ex.message}`, ex.stack);
         }
       }
       model = await entityManager.save(Model, model);

@@ -16,7 +16,7 @@ class DefaultScannerDto {
 }
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: "Must start with an uppercase letter or number. Can only include letters, numbers, underscore (_) or dash (-). No spaces. Max 20 characters.",
+        description: "Scanner code",
         example: "SCAN_001",
     }),
     (0, class_validator_1.IsNotEmpty)(),
@@ -47,5 +47,16 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], DefaultScannerDto.prototype, "locationId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: "Scanner type - REGISTRATION or LOCATION",
+        enum: ["REGISTRATION", "LOCATION"],
+        default: "LOCATION",
+        example: "LOCATION"
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], DefaultScannerDto.prototype, "scannerType", void 0);
 exports.DefaultScannerDto = DefaultScannerDto;
 //# sourceMappingURL=scanner-base.dto.js.map

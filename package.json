@@ -46,6 +46,7 @@
     "firebase-admin": "^11.3.0",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.45",
+    "mssql": "^11.0.1",
     "nestjs-pusher": "^0.0.12",
     "nestjs-typeorm-paginate": "^4.0.2",
     "node-cache": "^5.1.2",

@@ -17,7 +17,7 @@ BEGIN
         EXECUTE format('DROP TABLE IF EXISTS dbo.%I CASCADE;', r.tablename);
     END LOOP;
 
-    -- 2) Recreate tables (PKs only here; add FKs after seeding to avoid order issues)
+    -- 2) Recreate tables with UPDATED structure
 
     -- dbo."File"
     CREATE TABLE dbo."File" (
@@ -32,7 +32,26 @@ BEGIN
         CONSTRAINT pk_files_901578250 PRIMARY KEY ("FileId")
     );
 
-    -- dbo."Roles"
+    -- dbo."Status"
+    CREATE TABLE dbo."Status" (
+        "StatusId" BIGINT PRIMARY KEY,
+        "Name" VARCHAR COLLATE pg_catalog."default" NOT NULL
+    );
+
+    -- dbo."Locations" - UPDATED: VARCHAR ID with fixed values
+    CREATE TABLE dbo."Locations" (
+        "LocationId" VARCHAR COLLATE pg_catalog."default" NOT NULL,
+        "LocationCode" VARCHAR COLLATE pg_catalog."default" NOT NULL,
+        "Name" VARCHAR COLLATE pg_catalog."default" NOT NULL,
+        "CreatedBy" BIGINT NOT NULL,
+        "UpdatedBy" BIGINT NULL,
+        "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "LastUpdatedAt" TIMESTAMPTZ NULL,
+        "Active" BOOLEAN NOT NULL DEFAULT true,
+        CONSTRAINT "Locations_pkey" PRIMARY KEY ("LocationId")
+    );
+
+    -- dbo."Roles" - WITHOUT foreign keys initially
     CREATE TABLE dbo."Roles" (
         "RoleId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "RoleCode" VARCHAR COLLATE pg_catalog."default",
@@ -46,7 +65,7 @@ BEGIN
         CONSTRAINT "Role_pkey" PRIMARY KEY ("RoleId")
     );
 
-    -- dbo."EmployeeUsers"
+    -- dbo."EmployeeUsers" - WITHOUT foreign keys initially
     CREATE TABLE dbo."EmployeeUsers" (
         "EmployeeUserId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "EmployeeUserCode" VARCHAR COLLATE pg_catalog."default",
@@ -56,7 +75,7 @@ BEGIN
         "Password" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "FirstName" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "LastName" VARCHAR COLLATE pg_catalog."default" NOT NULL,
-        "Email" VARCHAR COLLATE pg_catalog."default" NOT NULL,
+        "Email" VARCHAR COLLate pg_catalog."default" NOT NULL,
         "ContactNo" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "AccessGranted" BOOLEAN NOT NULL DEFAULT false,
         "InvitationCode" TEXT COLLATE pg_catalog."default" NOT NULL,
@@ -78,31 +97,13 @@ BEGIN
         "Timestamp" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- dbo."Status"
-    CREATE TABLE dbo."Status" (
-        "StatusId" BIGINT PRIMARY KEY,
-        "Name" VARCHAR COLLATE pg_catalog."default" NOT NULL
-    );
-
-    -- dbo."Locations"
-    CREATE TABLE dbo."Locations" (
-        "LocationId" BIGINT GENERATED ALWAYS AS IDENTITY,
-        "LocationCode" VARCHAR COLLATE pg_catalog."default" NOT NULL,
-        "Name" VARCHAR COLLATE pg_catalog."default" NOT NULL,
-        "CreatedBy" BIGINT NOT NULL,
-        "UpdatedBy" BIGINT NULL,
-        "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "LastUpdatedAt" TIMESTAMPTZ NULL,
-        "Active" BOOLEAN NOT NULL DEFAULT true,
-        CONSTRAINT "Locations_pkey" PRIMARY KEY ("LocationId")
-    );
-
-    -- dbo."Scanner"
+    -- dbo."Scanner" - ✅ FIXED: ScannerType column IS DEFINED
     CREATE TABLE dbo."Scanner" (
         "ScannerId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "ScannerCode" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "Name" VARCHAR COLLATE pg_catalog."default" NOT NULL,
-        "LocationId" BIGINT NOT NULL,
+        "ScannerType" VARCHAR COLLATE pg_catalog."default" DEFAULT 'LOCATION', -- ✅ THIS EXISTS
+        "LocationId" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "StatusId" BIGINT NOT NULL,
         "AssignedEmployeeUserId" BIGINT NOT NULL,
         "CreatedBy" BIGINT NOT NULL,
@@ -128,7 +129,7 @@ BEGIN
         CONSTRAINT "Model_pkey" PRIMARY KEY ("ModelId")
     );
 
-    -- dbo."Units" (matches dbo1.sql: includes LocationId; UnitCode nullable)
+    -- dbo."Units" - UPDATED: VARCHAR LocationId
     CREATE TABLE dbo."Units" (
         "UnitId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "UnitCode" VARCHAR COLLATE pg_catalog."default",
@@ -142,18 +143,18 @@ BEGIN
         "DateCreated" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "LastUpdatedAt" TIMESTAMPTZ NULL,
         "StatusId" BIGINT NOT NULL,
-        "LocationId" BIGINT NOT NULL,
+        "LocationId" VARCHAR COLLATE pg_catalog."default" NOT NULL,
         "Active" BOOLEAN NOT NULL DEFAULT true,
         CONSTRAINT "Units_pkey" PRIMARY KEY ("UnitId")
     );
 
-    -- dbo."UnitLogs" (matches dbo1.sql: includes PrevStatusId)
+    -- dbo."UnitLogs" - UPDATED: VARCHAR LocationId
     CREATE TABLE dbo."UnitLogs" (
         "UnitLogId" BIGINT GENERATED ALWAYS AS IDENTITY,
         "UnitId" BIGINT NULL,
         "StatusId" BIGINT NULL,
         "PrevStatusId" BIGINT NULL,
-        "LocationId" BIGINT NULL,
+        "LocationId" VARCHAR COLLATE pg_catalog."default" NULL,
         "EmployeeUserId" BIGINT NULL,
         "Timestamp" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "UnitLogs_pkey" PRIMARY KEY ("UnitLogId")
@@ -166,7 +167,63 @@ BEGIN
         CONSTRAINT "SystemConfig_pkey" PRIMARY KEY ("Key")
     );
 
-    -- 3) Indexes (match dbo1.sql)
+    -- 3) Seed data (Status, FIXED Locations, Roles, Admin user)
+    -- Insert Status first (no dependencies)
+    INSERT INTO dbo."Status" ("StatusId","Name") VALUES
+        (1,'FOR DELIVERY'),
+        (2,'IN STORAGE'),
+        (3,'READY'),
+        (4,'HOLD'),
+        (5,'DELIVERED'),
+        (6,'CLOSED');
+
+    -- Insert Admin Role FIRST (without foreign key validation)
+    INSERT INTO dbo."Roles" (
+        "RoleCode","Name","CreatedBy","Active","AccessPages"
+    ) VALUES (
+        '000001',
+        'Admin',
+        1,  -- This will work now because we haven't added foreign keys yet
+        true,
+        '[
+          {"page":"Dashboard","view":true,"modify":true,"rights":[]},
+          {"page":"Unit Tracker","view":true,"modify":true,"rights":[]},
+          {"page":"Reports and Statistics","view":true,"modify":true,"rights":[]},
+          {"page":"Employee Users","view":true,"modify":true,"rights":[]},
+          {"page":"Roles","view":true,"modify":true,"rights":[]},
+          {"page":"CBU","view":true,"modify":true,"rights":[]},
+          {"page":"Locations","view":true,"modify":true,"rights":[]},
+          {"page":"Model","view":true,"modify":true,"rights":[]},
+          {"page":"RFID Scanner","view":true,"modify":true,"rights":[]},
+          {"page":"System Config","view":true,"modify":true,"rights":[]}
+        ]'
+    );
+
+    -- Insert Admin User SECOND
+    INSERT INTO dbo."EmployeeUsers" (
+        "EmployeeUserCode","UserName","Password","FirstName","LastName",
+        "Email","ContactNo","AccessGranted","RoleId","InvitationCode","CreatedBy"
+    ) VALUES (
+        '000001',
+        'admin',
+        '$2b$10$LqN3kzfgaYnP5PfDZFfT4edUFqh5Lu7amIxeDDDmu/KEqQFze.p8a',
+        'Admin','Admin',
+        'admin@gmail.com','0000',
+        true,
+        1,  -- RoleId 1 exists now
+        '0',
+        1   -- CreatedBy 1 (self-reference, will work after FK added)
+    );
+
+    -- FIXED LOCATIONS (4 locations)
+    INSERT INTO dbo."Locations" ("LocationId", "LocationCode", "Name", "CreatedBy", "Active", "DateCreated")
+    VALUES 
+        ('OPEN_AREA', 'OPEN_AREA', 'Open Area', 1, true, CURRENT_TIMESTAMP),
+        ('WAREHOUSE_4', 'WAREHOUSE_4', 'Warehouse 4', 1, true, CURRENT_TIMESTAMP),
+        ('WAREHOUSE_5', 'WAREHOUSE_5', 'Warehouse 5', 1, true, CURRENT_TIMESTAMP),
+        ('DELIVERED', 'DELIVERED', 'Delivered', 1, true, CURRENT_TIMESTAMP);
+
+    -- 4) Create indexes
     CREATE UNIQUE INDEX IF NOT EXISTS "Role_Name_Active_idx"
         ON dbo."Roles" ("Name" COLLATE pg_catalog."default" ASC NULLS LAST, "Active" ASC NULLS LAST)
         WHERE "Active" = true;
@@ -195,6 +252,10 @@ BEGIN
         ON dbo."Scanner" ("ScannerCode" COLLATE pg_catalog."default" ASC NULLS LAST, "Active" ASC NULLS LAST)
         WHERE "Active" = true;
 
+    CREATE UNIQUE INDEX IF NOT EXISTS "Scanner_ScannerType_idx"
+        ON dbo."Scanner" ("ScannerType" ASC NULLS LAST)
+        WHERE "Active" = true;
+
     CREATE UNIQUE INDEX IF NOT EXISTS "Model_ModelName_Active_idx"
         ON dbo."Model" ("ModelName" COLLATE pg_catalog."default" ASC NULLS LAST, "Active" ASC NULLS LAST)
         WHERE "Active" = true;
@@ -206,57 +267,13 @@ BEGIN
         TABLESPACE pg_default
         WHERE "Active" = true;
 
-
     CREATE UNIQUE INDEX IF NOT EXISTS "Units_RFID_Active_idx"
         ON dbo."Units" ("RFID" ASC NULLS LAST, "Active" ASC NULLS LAST)
         WHERE "Active" = true;
 
-    -- 4) Seed data (Status, Roles, Admin user)
-    INSERT INTO dbo."Status" ("StatusId","Name") VALUES
-        (1,'REGISTERED'),
-        (2,'STORAGE'),
-        (3,'READY'),
-        (4,'HOLD'),
-        (5,'DELIVERED'),
-        (6,'CLOSED');
-
-    INSERT INTO dbo."Roles" (
-        "RoleCode","Name","CreatedBy","Active","AccessPages"
-    ) VALUES (
-        '000001',
-        'Admin',
-        1,
-        true,
-        '[
-          {"page":"Dashboard","view":true,"modify":true,"rights":[]},
-          {"page":"Unit Tracker","view":true,"modify":true,"rights":[]},
-          {"page":"Reports and Statistics","view":true,"modify":true,"rights":[]},
-          {"page":"Employee Users","view":true,"modify":true,"rights":[]},
-          {"page":"Roles","view":true,"modify":true,"rights":[]},
-          {"page":"CBU","view":true,"modify":true,"rights":[]},
-          {"page":"Locations","view":true,"modify":true,"rights":[]},
-          {"page":"Model","view":true,"modify":true,"rights":[]},
-          {"page":"RFID Scanner","view":true,"modify":true,"rights":[]},
-          {"page":"System Config","view":true,"modify":true,"rights":[]}
-        ]'
-    );
-
-    INSERT INTO dbo."EmployeeUsers" (
-        "EmployeeUserCode","UserName","Password","FirstName","LastName",
-        "Email","ContactNo","AccessGranted","RoleId","InvitationCode","CreatedBy"
-    ) VALUES (
-        '000001',
-        'admin',
-        '$2b$10$LqN3kzfgaYnP5PfDZFfT4edUFqh5Lu7amIxeDDDmu/KEqQFze.p8a',
-        'Admin','Admin',
-        'admin@gmail.com','0000',
-        true,
-        1,
-        0,
-        1
-    );
-
-    -- 5) Foreign keys (add AFTER seeding so inserts above aren’t blocked)
+    -- 5) Add foreign keys LAST (after all data is inserted)
+    -- This prevents circular dependency errors during seeding
+    
     -- EmployeeUsers ↔ Roles, self refs
     ALTER TABLE dbo."EmployeeUsers"
       ADD CONSTRAINT "fk_EmployeeUsers_Roles"
@@ -306,7 +323,7 @@ BEGIN
         FOREIGN KEY ("UpdatedBy") REFERENCES dbo."EmployeeUsers"("EmployeeUserId") MATCH SIMPLE
         ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
 
-    -- Scanner → Locations, Status, EmployeeUsers
+    -- Scanner → Locations (VARCHAR), Status, EmployeeUsers
     ALTER TABLE dbo."Scanner"
       ADD CONSTRAINT "fk_Scanner_Locations"
         FOREIGN KEY ("LocationId") REFERENCES dbo."Locations"("LocationId") MATCH SIMPLE
@@ -348,7 +365,7 @@ BEGIN
         FOREIGN KEY ("UpdatedBy") REFERENCES dbo."EmployeeUsers"("EmployeeUserId") MATCH SIMPLE
         ON UPDATE NO ACTION ON DELETE NO ACTION;
 
-    -- Units → Model, Status, Locations, EmployeeUsers
+    -- Units → Model, Status, Locations (VARCHAR), EmployeeUsers
     ALTER TABLE dbo."Units"
       ADD CONSTRAINT "fk_Units_Model"
         FOREIGN KEY ("ModelId") REFERENCES dbo."Model"("ModelId") MATCH SIMPLE
@@ -374,7 +391,7 @@ BEGIN
         FOREIGN KEY ("UpdatedBy") REFERENCES dbo."EmployeeUsers"("EmployeeUserId") MATCH SIMPLE
         ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
 
-    -- UnitLogs → Units, Status (current & prev), Locations, EmployeeUsers
+    -- UnitLogs → Units, Status (current & prev), Locations (VARCHAR), EmployeeUsers
     ALTER TABLE dbo."UnitLogs"
       ADD CONSTRAINT "fk_UnitLogs_Unit"
         FOREIGN KEY ("UnitId") REFERENCES dbo."Units"("UnitId") MATCH SIMPLE
@@ -400,6 +417,7 @@ BEGIN
         FOREIGN KEY ("EmployeeUserId") REFERENCES dbo."EmployeeUsers"("EmployeeUserId") MATCH SIMPLE
         ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
 
+    RAISE NOTICE 'Database reset completed successfully! ScannerType column is present.';
 END;
 $$;
 

@@ -11,6 +11,7 @@ export declare class ModelService {
     private readonly modelRepo;
     private readonly cloudinaryService;
     private readonly cacheService;
+    private readonly logger;
     constructor(firebaseProvider: FirebaseProvider, modelRepo: Repository<Model>, cloudinaryService: CloudinaryService, cacheService: CacheService);
     getPagination({ pageSize, pageIndex, order, keywords }: {
         pageSize: any;

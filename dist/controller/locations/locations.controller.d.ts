@@ -1,5 +1,3 @@
-import { CreateLocationsDto } from "src/core/dto/locations/locations.create.dto";
-import { UpdateLocationsDto } from "src/core/dto/locations/locations.update.dto";
 import { ApiResponseModel } from "src/core/models/api-response.model";
 import { Locations } from "src/db/entities/Locations";
 import { LocationsService } from "src/services/locations.service";
@@ -16,7 +14,8 @@ export declare class LocationsController {
         results: Locations[];
         total: number;
     }>>;
-    create(accessDto: CreateLocationsDto, userId: string): Promise<ApiResponseModel<Locations>>;
-    update(locationId: string, dto: UpdateLocationsDto, userId: string): Promise<ApiResponseModel<Locations>>;
-    delete(locationId: string, userId: string): Promise<ApiResponseModel<Locations>>;
+    getAllFixedLocations(): Promise<ApiResponseModel<Locations[]>>;
+    createDisabled(): Promise<ApiResponseModel<any>>;
+    updateDisabled(locationId: string, dto: any, userId: string): Promise<ApiResponseModel<any>>;
+    deleteDisabled(locationId: string, userId: string): Promise<ApiResponseModel<any>>;
 }
