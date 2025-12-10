@@ -426,6 +426,8 @@ export class UnitsService {
 
       const result = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser.employeeUserId, scanner.status);
       
+      const unitCacheKey = this.keyUnit(rfid);
+      this.cacheService.del(unitCacheKey);
       this.cacheService.delByPrefix(CacheKeys.units.prefix);
       
       if (result && scanner.assignedEmployeeUser?.employeeUserCode) {
@@ -975,7 +977,9 @@ export class UnitsService {
     if (cached !== undefined) return cached;
 
     const unit = await em.findOne(Units, { where: { rfid, active: true }, relations: ["location", "status", "model"]  });
-    this.cacheService.set(key, unit ?? null, { ttlSeconds: 2 });
+    if (unit) {
+      this.cacheService.set(key, unit, { ttlSeconds: 2 });
+    }
     return unit ?? null;
   }
 
@@ -1197,6 +1201,9 @@ export class UnitsService {
           .forEach((e) => {
             this.logger.debug(`Sending registration event for RFID: ${e.rfid}, Employee: ${e.employeeUser?.employeeUserCode}`);
             
+            const unitCacheKey = this.keyUnit(e.rfid);
+            this.cacheService.del(unitCacheKey);
+            
             this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e);
             
             this.pusherService.reSync('units', {
@@ -1204,8 +1211,9 @@ export class UnitsService {
               action: 'RFID_DETECTED',
               scannerCode: e.scannerCode,
               location: e.location?.name,
+              locationId: e.location?.locationId,
               employeeUserCode: e.employeeUser?.employeeUserCode,
-              timestamp: e.timestamp || new Date()
+              timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now())
             });
           });
       }
