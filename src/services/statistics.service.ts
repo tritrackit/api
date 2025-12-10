@@ -70,25 +70,25 @@ export class StatisticsService {
 
   async getDashboardData(filters: StatisticsFilterDto) {
     try {
-      const { dateFrom, dateTo } = this.getDateRange(filters.timeframe);
+    const { dateFrom, dateTo } = this.getDateRange(filters.timeframe);
 
-      const totalUnits = await this.unitsRepo.count({ 
-        where: { active: true }
-      });
+    const totalUnits = await this.unitsRepo.count({ 
+      where: { active: true }
+    });
 
-      let unitsInStorage = 0;
+    let unitsInStorage = 0;
       const hasValidLocationFilter = filters.locationIds?.length && 
         filters.locationIds.some(id => id && id !== "string" && id.trim() !== "");
       
       if (hasValidLocationFilter) {
         const validLocationIds = filters.locationIds.filter(id => id && id !== "string" && id.trim() !== "");
-        unitsInStorage = await this.unitsRepo.count({
-          where: { 
-            active: true,
+      unitsInStorage = await this.unitsRepo.count({
+        where: { 
+          active: true,
             location: { locationId: In(validLocationIds) }
-          }
-        });
-      } else {
+        }
+      });
+    } else {
         const warehouseLocationCodes = ['WAREHOUSE_4', 'WAREHOUSE_5', 'OPEN_AREA'];
         const warehouseLocations = await this.locationsRepo.find({
           where: { 
@@ -99,79 +99,79 @@ export class StatisticsService {
         
         if (warehouseLocations.length > 0) {
           const warehouseLocationIds = warehouseLocations.map(loc => loc.locationId);
-          unitsInStorage = await this.unitsRepo.count({
-            where: { 
-              active: true,
+      unitsInStorage = await this.unitsRepo.count({
+        where: { 
+          active: true,
               location: { locationId: In(warehouseLocationIds) }
-            }
-          });
         }
-      }
+      });
+        }
+    }
 
       const holdStatus = await this.statusRepo.findOne({ where: { name: 'HOLD' } });
       const unitsOnHold = holdStatus ? await this.unitsRepo.count({
-        where: { 
-          active: true,
+      where: { 
+        active: true,
           status: { statusId: holdStatus.statusId }
-        }
+      }
       }) : 0;
 
       const forDeliveryStatus = await this.statusRepo.findOne({ where: { name: 'FOR DELIVERY' } });
       const unitsForDelivery = forDeliveryStatus ? await this.unitsRepo.count({
-        where: { 
-          active: true,
+      where: { 
+        active: true,
           status: { statusId: forDeliveryStatus.statusId }
-        }
+      }
       }) : 0;
 
-      // Get filtered units created in the timeframe
-      const filteredUnitsQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    // Get filtered units created in the timeframe
+    const filteredUnitsQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
-      this.applyFilters(filteredUnitsQuery, filters);
-      
-      const totalUnitsInTimeframe = await filteredUnitsQuery.getCount();
+    this.applyFilters(filteredUnitsQuery, filters);
+    
+    const totalUnitsInTimeframe = await filteredUnitsQuery.getCount();
 
-      // Get units by color for the timeframe (with filters)
-      const unitsByColorQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .select('unit.color', 'color')
-        .addSelect('COUNT(unit.unitId)', 'count')
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    // Get units by color for the timeframe (with filters)
+    const unitsByColorQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .select('unit.color', 'color')
+      .addSelect('COUNT(unit.unitId)', 'count')
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
-      this.applyFilters(unitsByColorQuery, filters);
-      
-      const unitsByColor = await unitsByColorQuery
-        .groupBy('unit.color')
-        .orderBy('count', 'DESC')
-        .getRawMany();
+    this.applyFilters(unitsByColorQuery, filters);
+    
+    const unitsByColor = await unitsByColorQuery
+      .groupBy('unit.color')
+      .orderBy('count', 'DESC')
+      .getRawMany();
 
-      // Get units by model for the timeframe (with filters)
-      const unitsByModelQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .select('model.modelName', 'modelName')
-        .addSelect('COUNT(unit.unitId)', 'count')
-        .leftJoin('unit.model', 'model')
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    // Get units by model for the timeframe (with filters)
+    const unitsByModelQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .select('model.modelName', 'modelName')
+      .addSelect('COUNT(unit.unitId)', 'count')
+      .leftJoin('unit.model', 'model')
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
-      this.applyFilters(unitsByModelQuery, filters);
-      
-      const unitsByModel = await unitsByModelQuery
-        .groupBy('model.modelName')
-        .orderBy('count', 'DESC')
-        .getRawMany();
+    this.applyFilters(unitsByModelQuery, filters);
+    
+    const unitsByModel = await unitsByModelQuery
+      .groupBy('model.modelName')
+      .orderBy('count', 'DESC')
+      .getRawMany();
 
-      // Format color data
-      const formattedColors = unitsByColor.map(item => ({
-        color: item.color || 'Unknown',
+    // Format color data
+    const formattedColors = unitsByColor.map(item => ({
+      color: item.color || 'Unknown',
         count: parseInt(item.count || '0', 10),
-        percentage: totalUnitsInTimeframe > 0 ? 
+      percentage: totalUnitsInTimeframe > 0 ? 
           ((parseInt(item.count || '0', 10) / totalUnitsInTimeframe) * 100).toFixed(2) + '%' : '0%'
-      }));
+    }));
 
       // Format model data for chart - ensure valid Chart.js format
       const modelLabels = unitsByModel.length > 0 
@@ -184,8 +184,8 @@ export class StatisticsService {
       const modelColors = this.generateColors(modelLabels.length);
       const unitsByModelChart = {
         labels: modelLabels,
-        datasets: [{
-          label: 'Units Created',
+      datasets: [{
+        label: 'Units Created',
           data: modelData,
           backgroundColor: modelColors,
           borderColor: modelColors.map(c => {
@@ -222,32 +222,32 @@ export class StatisticsService {
             return c;
           }),
           borderWidth: 2
-        }]
-      };
+      }]
+    };
 
-      return {
-        metadata: {
-          generatedAt: new Date().toISOString(),
-          timeframe: filters.timeframe,
-          filtersApplied: this.getAppliedFilters(filters),
-          dateRange: {
-            from: dateFrom,
-            to: dateTo
-          }
-        },
-        summary: {
-          totalUnits,
-          unitsInStorage,
-          unitsOnHold,
-          unitsForDelivery,
-          unitsCreatedInPeriod: totalUnitsInTimeframe
-        },
-        colorDistribution: formattedColors,
-        chartData: {
+    return {
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        timeframe: filters.timeframe,
+        filtersApplied: this.getAppliedFilters(filters),
+        dateRange: {
+          from: dateFrom,
+          to: dateTo
+        }
+      },
+      summary: {
+        totalUnits,
+        unitsInStorage,
+        unitsOnHold,
+        unitsForDelivery,
+        unitsCreatedInPeriod: totalUnitsInTimeframe
+      },
+      colorDistribution: formattedColors,
+      chartData: {
           unitsByModel: unitsByModelChart,
           unitsByColor: unitsByColorChart
-        }
-      };
+      }
+    };
     } catch (error) {
       throw new HttpException(
         `Error retrieving dashboard data: ${error.message}`,
@@ -259,63 +259,63 @@ export class StatisticsService {
   // REPORT ENDPOINT - Production data (FIXED VERSION)
   async getProductionReport(filters: StatisticsFilterDto) {
     try {
-      const { dateFrom, dateTo } = this.getDateRange(filters.timeframe);
+    const { dateFrom, dateTo } = this.getDateRange(filters.timeframe);
 
-      // Build base query for ALL units in timeframe - ALWAYS join status table
-      const baseQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .leftJoin('unit.status', 'status') // CRITICAL: Always join status for reports
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    // Build base query for ALL units in timeframe - ALWAYS join status table
+    const baseQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .leftJoin('unit.status', 'status') // CRITICAL: Always join status for reports
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
-      this.applyFilters(baseQuery, filters);
-      
-      const totalUnitsInPeriod = await baseQuery.getCount();
+    this.applyFilters(baseQuery, filters);
+    
+    const totalUnitsInPeriod = await baseQuery.getCount();
 
-      const deliveredUnitsQuery = baseQuery.clone();
-      const deliveredUnits = await deliveredUnitsQuery
-        .andWhere('status.name = :statusName', { statusName: 'DELIVERED' })
-        .getCount();
+    const deliveredUnitsQuery = baseQuery.clone();
+    const deliveredUnits = await deliveredUnitsQuery
+      .andWhere('status.name = :statusName', { statusName: 'DELIVERED' })
+      .getCount();
 
-      const unitsByModelQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .select('model.modelName', 'modelname')
-        .addSelect('COUNT(unit.unitId)', 'totalunits')
-        .addSelect(`SUM(CASE WHEN status.name = 'DELIVERED' THEN 1 ELSE 0 END)`, 'deliveredunits')
-        .leftJoin('unit.model', 'model')
-        .leftJoin('unit.status', 'status') // Join status for CASE statement
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    const unitsByModelQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .select('model.modelName', 'modelname')
+      .addSelect('COUNT(unit.unitId)', 'totalunits')
+      .addSelect(`SUM(CASE WHEN status.name = 'DELIVERED' THEN 1 ELSE 0 END)`, 'deliveredunits')
+      .leftJoin('unit.model', 'model')
+      .leftJoin('unit.status', 'status') // Join status for CASE statement
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
       // Apply filters to model query (reuse applyFilters method)
       this.applyFilters(unitsByModelQuery, filters);
     
-      const unitsByModelRaw = await unitsByModelQuery
-        .groupBy('model.modelName')
-        .orderBy('COUNT(unit.unitId)', 'DESC')
-        .getRawMany();
+    const unitsByModelRaw = await unitsByModelQuery
+      .groupBy('model.modelName')
+      .orderBy('COUNT(unit.unitId)', 'DESC')
+      .getRawMany();
 
-      const unitsByColorQuery = this.unitsRepo
-        .createQueryBuilder('unit')
-        .select('unit.color', 'color')
-        .addSelect('COUNT(unit.unitId)', 'totalunits')
-        .addSelect(`SUM(CASE WHEN status.name = 'DELIVERED' THEN 1 ELSE 0 END)`, 'deliveredunits')
-        .leftJoin('unit.status', 'status') // Join status for CASE statement
-        .where('unit.active = :active', { active: true })
-        .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
+    const unitsByColorQuery = this.unitsRepo
+      .createQueryBuilder('unit')
+      .select('unit.color', 'color')
+      .addSelect('COUNT(unit.unitId)', 'totalunits')
+      .addSelect(`SUM(CASE WHEN status.name = 'DELIVERED' THEN 1 ELSE 0 END)`, 'deliveredunits')
+      .leftJoin('unit.status', 'status') // Join status for CASE statement
+      .where('unit.active = :active', { active: true })
+      .andWhere('unit.dateCreated BETWEEN :dateFrom AND :dateTo', { dateFrom, dateTo });
 
       // Apply filters to color query (reuse applyFilters method)
       this.applyFilters(unitsByColorQuery, filters);
     
-      const unitsByColorRaw = await unitsByColorQuery
-        .groupBy('unit.color')
-        .orderBy('COUNT(unit.unitId)', 'DESC')
-        .getRawMany();
+    const unitsByColorRaw = await unitsByColorQuery
+      .groupBy('unit.color')
+      .orderBy('COUNT(unit.unitId)', 'DESC')
+      .getRawMany();
 
-      const deliveryRate = totalUnitsInPeriod > 0 ? 
-        ((deliveredUnits / totalUnitsInPeriod) * 100).toFixed(2) + '%' : '0%';
+    const deliveryRate = totalUnitsInPeriod > 0 ? 
+      ((deliveredUnits / totalUnitsInPeriod) * 100).toFixed(2) + '%' : '0%';
 
-      const periodDisplay = `${moment(dateFrom).format('MMM D, YYYY')} - ${moment(dateTo).format('MMM D, YYYY')}`.toUpperCase();
+    const periodDisplay = `${moment(dateFrom).format('MMM D, YYYY')} - ${moment(dateTo).format('MMM D, YYYY')}`.toUpperCase();
 
       const modelReportLabels = unitsByModelRaw.length > 0
         ? unitsByModelRaw.map(item => item.modelname || 'Unknown')
@@ -324,22 +324,22 @@ export class StatisticsService {
         ? unitsByModelRaw.map(item => parseInt(item.totalunits || '0', 10))
         : [0];
       
-      const filteredUnitsByModelChart = {
+    const filteredUnitsByModelChart = {
         labels: modelReportLabels,
-        datasets: [{
+      datasets: [{
           label: 'Total Units',
           data: modelReportData,
           backgroundColor: this.generateColors(modelReportLabels.length),
           borderColor: this.generateColors(modelReportLabels.length),
           borderWidth: 2
-        }]
-      };
+      }]
+    };
 
-      const totalVsDeliveredChart = {
-        labels: ['Total Units Created', 'Units Delivered'],
-        datasets: [{
-          label: 'Units',
-          data: [totalUnitsInPeriod, deliveredUnits],
+    const totalVsDeliveredChart = {
+      labels: ['Total Units Created', 'Units Delivered'],
+      datasets: [{
+        label: 'Units',
+        data: [totalUnitsInPeriod, deliveredUnits],
           backgroundColor: ['#FF9800', '#2196F3'], // Orange and Blue
           borderColor: ['#F57C00', '#1976D2'], // Darker Orange and Blue
           borderWidth: 2
@@ -401,26 +401,26 @@ export class StatisticsService {
             borderWidth: 2
           }
         ]
-      };
+    };
 
-      return {
-        metadata: {
-          generatedAt: new Date().toISOString(),
-          timeframe: filters.timeframe,
-          periodDisplay,
-          filtersApplied: this.getAppliedFilters(filters),
-          dateRange: {
-            from: dateFrom,
-            to: dateTo
-          }
-        },
-        summary: {
-          totalUnits: totalUnitsInPeriod,
-          deliveredUnits,
-          deliveryRate,
-          pendingUnits: totalUnitsInPeriod - deliveredUnits
-        },
-        byModel: unitsByModelRaw.map(item => {
+    return {
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        timeframe: filters.timeframe,
+        periodDisplay,
+        filtersApplied: this.getAppliedFilters(filters),
+        dateRange: {
+          from: dateFrom,
+          to: dateTo
+        }
+      },
+      summary: {
+        totalUnits: totalUnitsInPeriod,
+        deliveredUnits,
+        deliveryRate,
+        pendingUnits: totalUnitsInPeriod - deliveredUnits
+      },
+      byModel: unitsByModelRaw.map(item => {
           const total = parseInt(item.totalunits || '0', 10);
           const delivered = parseInt(item.deliveredunits || '0', 10);
         return {
@@ -542,7 +542,7 @@ export class StatisticsService {
         (alias: any) => alias.name === 'location'
       );
       if (!hasLocationJoin) {
-        query.leftJoin('unit.location', 'location');
+      query.leftJoin('unit.location', 'location');
       }
       query.andWhere('location.locationId IN (:...locationIds)', { 
         locationIds: validLocationIds

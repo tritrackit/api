@@ -333,11 +333,14 @@ export class UnitsService {
       unit.description = dto.description;
       unit.dateCreated = await getDate();
 
-      const model = await entityManager.findOne(Model, {
-        where: { modelId: dto.modelId }
-      });
-      if (!model) throw Error(MODEL_ERROR_NOT_FOUND);
-      unit.model = model;
+      if (dto.modelId) {
+        const model = await entityManager.findOne(Model, {
+          where: { modelId: dto.modelId }
+        });
+        if (!model) throw Error(MODEL_ERROR_NOT_FOUND);
+        unit.model = model;
+      }
+      // If no modelId provided, unit.model will be null (allowed for auto-registration)
 
       unit.status = status;
 
@@ -1184,9 +1187,26 @@ export class UnitsService {
       if (result.registerEvents && result.registerEvents.length > 0) {
         this.logger.debug(`Triggering ${result.registerEvents.length} registration events via Pusher (non-blocking)...`);
         result.registerEvents
-          .filter((e) => !!e.employeeUser?.employeeUserCode)
+          .filter((e) => {
+            const hasEmployeeCode = !!e.employeeUser?.employeeUserCode;
+            if (!hasEmployeeCode) {
+              this.logger.warn(`Registration event filtered out - missing employeeUserCode for RFID: ${e.rfid}`);
+            }
+            return hasEmployeeCode;
+          })
           .forEach((e) => {
+            this.logger.debug(`Sending registration event for RFID: ${e.rfid}, Employee: ${e.employeeUser?.employeeUserCode}`);
+            
             this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e);
+            
+            this.pusherService.reSync('units', {
+              rfid: e.rfid,
+              action: 'RFID_DETECTED',
+              scannerCode: e.scannerCode,
+              location: e.location?.name,
+              employeeUserCode: e.employeeUser?.employeeUserCode,
+              timestamp: e.timestamp || new Date()
+            });
           });
       }
 

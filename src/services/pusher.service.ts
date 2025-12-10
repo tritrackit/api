@@ -54,6 +54,10 @@ export class PusherService {
       })
       .catch((error: any) => {
         this.logger.error(`Pusher async trigger failed: ${error.message}`, error.stack);
+        this.logger.error(`Pusher error details - Channel: ${channel}, Event: ${event}, Data keys: ${Object.keys(data || {}).join(', ')}`);
+        if (error.response) {
+          this.logger.error(`Pusher API response: ${JSON.stringify(error.response)}`);
+        }
       });
   }
 
@@ -88,7 +92,13 @@ export class PusherService {
     }
   ): void {
     try {
-      this.triggerAsync(`scanner-${employeeUserCode}`, "scanner", { data });
+      if (!employeeUserCode) {
+        this.logger.warn(`sendTriggerRegister: employeeUserCode is missing, cannot send event for RFID: ${data.rfid}`);
+        return;
+      }
+      const channel = `scanner-${employeeUserCode}`;
+      this.logger.debug(`Sending registration event to channel: ${channel}, RFID: ${data.rfid}`);
+      this.triggerAsync(channel, "scanner", { data });
     } catch (ex) {
       this.logger.error(`sendTriggerRegister failed: ${ex.message}`, ex.stack);
     }
