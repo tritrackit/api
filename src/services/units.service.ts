@@ -1061,7 +1061,7 @@ export class UnitsService {
   
         if (!unit) {
           if (scanner.scannerType === "REGISTRATION") {
-            this.logger.debug(`Registration scanner - sending IMMEDIATE registration event for new RFID: ${rfid}`);
+            this.logger.debug(`⚡ Registration scanner - sending IMMEDIATE registration event for new RFID: ${rfid}`);
             
             this.pusherService.sendRegistrationEventImmediate({
               rfid,
@@ -1070,6 +1070,8 @@ export class UnitsService {
               location: scanner.location,
               scannerType: scanner.scannerType,
               employeeUser: scanner.assignedEmployeeUser
+            }).catch(err => {
+              this.logger.error(`Failed to send registration event: ${err.message}`);
             });
             
             registerEvents.push({
@@ -1221,14 +1223,12 @@ export class UnitsService {
             return hasEmployeeCode;
           })
           .forEach((e) => {
-            this.logger.debug(`Sending registration event for RFID: ${e.rfid}, Employee: ${e.employeeUser?.employeeUserCode}`);
+            this.logger.debug(`⚡ Sending registration event for RFID: ${e.rfid}, Employee: ${e.employeeUser?.employeeUserCode}`);
             
             const unitCacheKey = this.keyUnit(e.rfid);
             this.cacheService.del(unitCacheKey);
             
-            this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e);
-            
-            this.pusherService.reSync('units', {
+            const reSyncData = {
               rfid: e.rfid,
               action: 'RFID_DETECTED',
               scannerCode: e.scannerCode,
@@ -1236,6 +1236,13 @@ export class UnitsService {
               locationId: e.location?.locationId,
               employeeUserCode: e.employeeUser?.employeeUserCode,
               timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now())
+            };
+
+            Promise.all([
+              Promise.resolve(this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e)),
+              Promise.resolve(this.pusherService.reSync('units', reSyncData))
+            ]).catch(err => {
+              this.logger.error(`Failed to send parallel registration events: ${err.message}`);
             });
           });
       }

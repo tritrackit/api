@@ -18,7 +18,7 @@ export class PusherService {
   pusher;
   private batchQueue: Map<string, Map<string, BatchedEvent>> = new Map();
   private batchTimers: Map<string, NodeJS.Timeout> = new Map();
-  private readonly BATCH_DELAY_MS = 2000;
+  private readonly BATCH_DELAY_MS = 100;
   
   constructor(private readonly config: ConfigService) {
     const appId = this.config.get<string>("PUSHER_APPID");
@@ -42,10 +42,14 @@ export class PusherService {
       key,
       secret,
       cluster,
-      useTLS,
+      useTLS: true,
+      enabledTransports: ['ws', 'wss'],
+      disableStats: true,
+      activityTimeout: 60000,
+      pongTimeout: 30000
     });
 
-    this.logger.log(`Pusher initialized for cluster: ${cluster}`);
+    this.logger.log(`Pusher initialized for cluster: ${cluster} (WebSocket optimized)`);
   }
 
   async trigger(channel: string, event: string, data: any): Promise<void> {
@@ -58,12 +62,24 @@ export class PusherService {
   }
 
   triggerAsync(channel: string, event: string, data: any): void {
-    this.pusher.trigger(channel, event, data)
+    const startTime = Date.now();
+    const payload = {
+      ...data,
+      _pusherSentAt: startTime
+    };
+
+    this.pusher.trigger(channel, event, payload)
       .then(() => {
-        this.logger.debug(`Pusher event triggered: ${channel}/${event}`);
+        const latency = Date.now() - startTime;
+        this.logger.debug(`⚡ Pusher ${channel}/${event}: ${latency}ms`);
+        
+        if (latency > 500) {
+          this.logger.warn(`⚠️ Slow Pusher: ${latency}ms for ${channel}/${event}`);
+        }
       })
       .catch((error: any) => {
-        this.logger.error(`Pusher async trigger failed: ${error.message}`, error.stack);
+        const latency = Date.now() - startTime;
+        this.logger.error(`Pusher async trigger failed: ${error.message} (${latency}ms)`, error.stack);
         this.logger.error(`Pusher error details - Channel: ${channel}, Event: ${event}, Data keys: ${Object.keys(data || {}).join(', ')}`);
         if (error.response) {
           this.logger.error(`Pusher API response: ${JSON.stringify(error.response)}`);
@@ -73,14 +89,13 @@ export class PusherService {
 
   /**
    * ReSync event - non-blocking for better performance
-   * Batches events by type for 2 seconds to prevent overwhelming frontend
+   * RFID events sent immediately, other events batched with 100ms delay
    * If same RFID is updated multiple times, only latest state is sent
-   * Registration events (RFID_DETECTED) are sent immediately without batching
    */
   reSync(type: string, data: any): void {
     try {
-      if (data?.action === 'RFID_DETECTED') {
-        this.logger.debug(`Sending RFID_DETECTED event immediately (no batching)`);
+      if (data?.rfid || data?.action?.includes('RFID') || data?.action === 'RFID_DETECTED') {
+        this.logger.debug(`⚡ Sending RFID event immediately (no batching): ${data?.rfid || data?.action}`);
         this.triggerAsync("all", "reSync", { type, data });
         return;
       }
@@ -174,38 +189,55 @@ export class PusherService {
     }
   }
 
-  sendRegistrationEventImmediate(data: {
+  async sendRegistrationEventImmediate(data: {
     rfid: string;
     scannerCode: string;
     timestamp: Date | string;
     location?: Locations | { name: string; locationId: string };
     scannerType?: string;
     employeeUser?: EmployeeUsers;
-  }): void {
+  }): Promise<void> {
     try {
-      this.logger.debug(`Sending IMMEDIATE registration event for RFID: ${data.rfid}`);
+      const startTime = Date.now();
+      this.logger.debug(`⚡ Sending IMMEDIATE registration event for RFID: ${data.rfid}`);
       
-      this.triggerAsync('registration-channel', 'new-registration', {
+      const registrationPayload = {
         rfid: data.rfid,
         scannerCode: data.scannerCode,
         timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()),
         location: data.location?.name || (data.location as any)?.name || 'Unknown',
         locationId: data.location?.locationId || (data.location as any)?.locationId,
-        scannerType: data.scannerType || 'REGISTRATION'
-      });
+        scannerType: data.scannerType || 'REGISTRATION',
+        _pusherSentAt: startTime
+      };
+
+      const promises: Promise<any>[] = [
+        this.pusher.trigger('registration-channel', 'new-registration', registrationPayload)
+      ];
 
       if (data.employeeUser?.employeeUserCode) {
         const channel = `scanner-${data.employeeUser.employeeUserCode}`;
-        this.logger.debug(`Sending registration event to employee channel: ${channel}, RFID: ${data.rfid}`);
-        this.triggerAsync(channel, "scanner", {
-          data: {
-            rfid: data.rfid,
-            scannerCode: data.scannerCode,
-            timestamp: data.timestamp,
-            employeeUser: data.employeeUser,
-            location: data.location
-          }
-        });
+        this.logger.debug(`⚡ Sending to employee channel: ${channel}, RFID: ${data.rfid}`);
+        promises.push(
+          this.pusher.trigger(channel, "scanner", {
+            data: {
+              rfid: data.rfid,
+              scannerCode: data.scannerCode,
+              timestamp: data.timestamp,
+              employeeUser: data.employeeUser,
+              location: data.location,
+              _pusherSentAt: startTime
+            }
+          })
+        );
+      }
+
+      await Promise.all(promises);
+      const latency = Date.now() - startTime;
+      this.logger.debug(`⚡ Registration events sent in parallel: ${latency}ms for RFID: ${data.rfid}`);
+      
+      if (latency > 500) {
+        this.logger.warn(`⚠️ Slow registration event: ${latency}ms`);
       }
     } catch (ex) {
       this.logger.error(`sendRegistrationEventImmediate failed: ${ex.message}`, ex.stack);
