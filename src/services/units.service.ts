@@ -423,6 +423,27 @@ export class UnitsService {
 
       const result = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser.employeeUserId, scanner.status);
       
+      this.cacheService.delByPrefix(CacheKeys.units.prefix);
+      
+      if (result && scanner.assignedEmployeeUser?.employeeUserCode) {
+        this.pusherService.sendTriggerRegister(scanner.assignedEmployeeUser.employeeUserCode, {
+          rfid: result.rfid,
+          scannerCode: scannerCode,
+          employeeUser: scanner.assignedEmployeeUser,
+          location: scanner.location,
+          timestamp: new Date()
+        });
+        this.pusherService.reSync('units', {
+          rfid: result.rfid,
+          action: 'UNIT_REGISTERED',
+          unitCode: result.unitCode,
+          location: result.location?.name,
+          status: result.status?.name,
+          timestamp: new Date()
+        });
+        this.logger.debug(`Pusher events triggered for registered unit: ${result.unitCode} (RFID: ${result.rfid})`);
+      }
+      
       return this.cleanUnitResponse(result);
     });
   }
