@@ -1,4 +1,3 @@
-// src/controllers/metadata.controller.ts
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { ApiResponseModel } from "src/core/models/api-response.model";

@@ -1,4 +1,3 @@
-// src/controllers/statistics.controller.ts
 import {
   Body,
   Controller,

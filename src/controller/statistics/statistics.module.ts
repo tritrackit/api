@@ -1,4 +1,3 @@
-// src/modules/statistics.module.ts
 import { Module } from "@nestjs/common";
 import { StatisticsController } from "./statistics.controller";
 import { MetadataController } from "../meta-data/metadata.controller";
@@ -22,6 +21,6 @@ import { StatisticsService } from "src/services/statistics.service";
   ],
   controllers: [StatisticsController, MetadataController],
   providers: [StatisticsService],
-  exports: [StatisticsService, TypeOrmModule], // Export TypeOrmModule for MetadataController
+  exports: [StatisticsService, TypeOrmModule], 
 })
 export class StatisticsModule {}

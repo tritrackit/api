@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "prebuild": "rimraf dist && nest build",
+    "prebuild": "rimraf dist",
     "prod:build": "rimraf dist && nest build",
     "prod:install": "npm install -D @nestjs/cli && npm install",
     "build": "nest build",
