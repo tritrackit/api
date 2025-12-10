@@ -3,11 +3,6 @@
     "buildCommand": "npm run build",
     "installCommand": "npm install",
     "framework": null,
-    "functions": {
-        "dist/main.js": {
-            "includeFiles": "dist/**"
-        }
-    },
     "builds": [
         {
             "src": "dist/main.js",
