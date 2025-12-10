@@ -1019,6 +1019,7 @@ export class UnitsService {
         location: Locations;
         timestamp: Date;
       }> = [];
+      const locationUpdatedRfids = new Set<string>();
   
       if (!logsDto?.data?.length) {
         this.logger.warn('No data in logsDto');
@@ -1075,12 +1076,21 @@ export class UnitsService {
         if (scanner.scannerType === "LOCATION") {
           try {
             this.logger.debug(`Calling updateUnitLocation() for location scanner...`);
-            await this.updateUnitLocation(rfid, scannerCode);
+            const locationUpdateResult = await this.updateUnitLocation(rfid, scannerCode);
             this.logger.debug(`updateUnitLocation() success - Pusher triggered automatically`);
+            
+            const unitCacheKey = this.keyUnit(rfid);
+            const lastLogCacheKey = this.keyLastLog(rfid);
+            this.cacheService.del(unitCacheKey);
+            this.cacheService.del(lastLogCacheKey);
+            
+            unitMemo.set(rfid, locationUpdateResult.unit);
+            locationUpdatedRfids.add(rfid);
             
             continue;
           } catch (error) {
             this.logger.error(`updateUnitLocation() failed: ${error.message}`, error.stack);
+            continue;
           }
         }
   
@@ -1156,7 +1166,7 @@ export class UnitsService {
       }
 
       const rfidsToNotify = Array.from(
-        new Set(unitLogs.map((l) => l.unit.rfid))
+        new Set(unitLogs.map((l) => l.unit.rfid).filter(rfid => !locationUpdatedRfids.has(rfid)))
       );
 
         const dedup = new Set<string>();
