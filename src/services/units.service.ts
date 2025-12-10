@@ -538,16 +538,7 @@ export class UnitsService {
       };
     });
 
-    const unitCacheKey = this.keyUnit(result.unit.rfid);
-    const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
-    const unitCodeCacheKey = CacheKeys.units.byCode(result.unit.unitCode);
-    
-    this.cacheService.del(unitCacheKey);
-    this.cacheService.del(lastLogCacheKey);
-    this.cacheService.del(unitCodeCacheKey);
-    this.cacheService.delByPrefix(CacheKeys.units.prefix);
-    
-    this.logger.debug(`Cache invalidated for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid}) before Pusher trigger`);
+    this.logger.debug(`Sending Pusher event for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
 
     this.pusherService.reSync('units', {
       rfid: result.unit.rfid,
@@ -559,6 +550,17 @@ export class UnitsService {
       unitCode: result.unit.unitCode,
       timestamp: new Date()
     });
+
+    const unitCacheKey = this.keyUnit(result.unit.rfid);
+    const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
+    const unitCodeCacheKey = CacheKeys.units.byCode(result.unit.unitCode);
+    
+    this.cacheService.del(unitCacheKey);
+    this.cacheService.del(lastLogCacheKey);
+    this.cacheService.del(unitCodeCacheKey);
+    this.cacheService.delByPrefix(CacheKeys.units.prefix);
+    
+    this.logger.debug(`Cache invalidated for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid}) after Pusher trigger`);
   
       return this.cleanLocationUpdateResponse(result);
   }
@@ -1059,7 +1061,17 @@ export class UnitsService {
   
         if (!unit) {
           if (scanner.scannerType === "REGISTRATION") {
-            this.logger.debug(`Registration scanner - sending registration event for new RFID`);
+            this.logger.debug(`Registration scanner - sending IMMEDIATE registration event for new RFID: ${rfid}`);
+            
+            this.pusherService.sendRegistrationEventImmediate({
+              rfid,
+              scannerCode,
+              timestamp: log.timestamp,
+              location: scanner.location,
+              scannerType: scanner.scannerType,
+              employeeUser: scanner.assignedEmployeeUser
+            });
+            
             registerEvents.push({
               rfid,
               scannerCode,
