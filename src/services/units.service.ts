@@ -394,7 +394,7 @@ export class UnitsService {
           active: true,
           scannerType: "REGISTRATION" 
         },
-        relations: ["location", "status"]
+        relations: ["location", "status", "assignedEmployeeUser"]
       });
 
       if (!scanner) {
@@ -409,6 +409,10 @@ export class UnitsService {
         throw Error("Unit with this RFID already registered");
       }
 
+      if (!scanner.assignedEmployeeUser) {
+        throw Error("Registration scanner does not have an assigned employee user");
+      }
+
       const createUnitDto = new CreateUnitDto();
       createUnitDto.rfid = rfid;
       createUnitDto.chassisNo = additionalData.chassisNo || `CH-${rfid}`;
@@ -417,7 +421,7 @@ export class UnitsService {
       createUnitDto.modelId = additionalData.modelId;
       createUnitDto.locationId = scanner.location.locationId;
 
-      const result = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser?.employeeUserId, scanner.status);
+      const result = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser.employeeUserId, scanner.status);
       
       return this.cleanUnitResponse(result);
     });
