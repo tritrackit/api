@@ -11,9 +11,7 @@
     ],
     "functions": {
         "dist/main.js": {
-            "includeFiles": [
-                "dist/**"
-            ]
+            "includeFiles": "dist/**"
         }
     },
     "routes": [
