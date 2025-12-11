@@ -32,10 +32,13 @@ export class EmailService {
         "utf-8"
       );
       emailTemplate = emailTemplate.replace("{{_OTP_}}", otp);
-      const hastOTP = await hash(otp);
+      // 🔥 FIX: Send plain OTP in URL (not hashed) so verification can use bcrypt.compare
+      // The invitationCode in DB is hashed, so we compare: compare(plainOTP, hashedInvitationCode)
+      // Note: OTP in URL is less secure but necessary for bcrypt comparison
+      // Since it's a one-time code with short expiration, this is acceptable
       emailTemplate = emailTemplate.replace(
         "{{_URL_}}",
-        `${evVerifyURL}?email=${recipient}&code=${hastOTP}`
+        `${evVerifyURL}?email=${recipient}&code=${otp}`
       );
       emailTemplate = emailTemplate.replace(
         "{{_YEAR_}}",

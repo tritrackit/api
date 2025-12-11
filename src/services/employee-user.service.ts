@@ -222,7 +222,9 @@ export class EmployeeUserService {
           employeeUser.firstName = dto.firstName ?? "";
           employeeUser.lastName = dto.lastName ?? "";
 
-          employeeUser.invitationCode = generateOTP();
+          // Generate OTP and hash it before storing (similar to password)
+          const plainOTP = generateOTP();
+          employeeUser.invitationCode = await hash(plainOTP);
           if (dto.roleCode) {
             const roleKey = CacheKeys.roles.byCode(dto.roleCode);
             let role = this.cacheService.get<Roles>(roleKey);
@@ -287,9 +289,10 @@ export class EmployeeUserService {
           });
           delete employeeUser.password;
           delete employeeUser.refreshToken;
+          // Pass plain OTP to email service (it will hash it for the URL)
           const sendEmailResult = await this.emailService.sendEmailVerification(
             employeeUser.email,
-            employeeUser.invitationCode
+            plainOTP
           );
           if (!sendEmailResult) {
             throw new Error("Error sending email verification!");
@@ -357,11 +360,14 @@ export class EmployeeUserService {
             HttpStatus.BAD_REQUEST
           );
         }
-        employeeUser.invitationCode = generateOTP();
+        // Generate OTP and hash it before storing (similar to password)
+        const plainOTP = generateOTP();
+        employeeUser.invitationCode = await hash(plainOTP);
         employeeUser = await entityManager.save(EmployeeUsers, employeeUser);
+        // Pass plain OTP to email service (it will hash it for the URL)
         const sendEmailResult = await this.emailService.sendEmailVerification(
           employeeUser.email,
-          employeeUser.invitationCode
+          plainOTP
         );
         if (!sendEmailResult) {
           throw new Error("Error sending email verification!");

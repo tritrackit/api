@@ -114,11 +114,25 @@ export class AuthService {
       if (employeeUser.accessGranted) {
         throw Error("The user has already been granted role!");
       }
-      // 🔥 FIX: Correct parameter order - compare(plainText, hashedValue)
-      // Note: hashCode from URL is already hashed, so this might need adjustment
-      // If hashCode is plain text, use: compare(hashCode, employeeUser.invitationCode)
-      // If hashCode is already hashed, we need to compare hashes directly
-      const codeMatch = await compare(hashCode, employeeUser.invitationCode);
+      // hashCode from URL is now plain OTP (email service sends plain OTP)
+      // employeeUser.invitationCode in DB might be hashed (new users) or plain (old users)
+      // Try bcrypt.compare first (for hashed codes), fallback to direct comparison (for plain codes)
+      let codeMatch = false;
+      
+      // Check if invitationCode looks like a bcrypt hash (starts with $2a$, $2b$, or $2y$)
+      const isHashed = employeeUser.invitationCode && 
+        (employeeUser.invitationCode.startsWith('$2a$') || 
+         employeeUser.invitationCode.startsWith('$2b$') || 
+         employeeUser.invitationCode.startsWith('$2y$'));
+      
+      if (isHashed) {
+        // New format: hashed code in DB, plain OTP in URL
+        codeMatch = await compare(hashCode, employeeUser.invitationCode);
+      } else {
+        // Old format: plain code in DB, plain OTP in URL (backward compatibility)
+        codeMatch = hashCode === employeeUser.invitationCode;
+      }
+      
       if (!codeMatch) {
         throw Error(VERFICATION_ERROR_CODE_INCORRECT);
       }
