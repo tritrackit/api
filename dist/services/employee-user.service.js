@@ -167,7 +167,8 @@ let EmployeeUserService = EmployeeUserService_1 = class EmployeeUserService {
                 employeeUser.password = await (0, utils_1.hash)(dto.password);
                 employeeUser.firstName = (_a = dto.firstName) !== null && _a !== void 0 ? _a : "";
                 employeeUser.lastName = (_b = dto.lastName) !== null && _b !== void 0 ? _b : "";
-                employeeUser.invitationCode = (0, utils_1.generateOTP)();
+                const plainOTP = (0, utils_1.generateOTP)();
+                employeeUser.invitationCode = await (0, utils_1.hash)(plainOTP);
                 if (dto.roleCode) {
                     const roleKey = cache_constant_1.CacheKeys.roles.byCode(dto.roleCode);
                     let role = this.cacheService.get(roleKey);
@@ -226,7 +227,7 @@ let EmployeeUserService = EmployeeUserService_1 = class EmployeeUserService {
                 });
                 delete employeeUser.password;
                 delete employeeUser.refreshToken;
-                const sendEmailResult = await this.emailService.sendEmailVerification(employeeUser.email, employeeUser.invitationCode);
+                const sendEmailResult = await this.emailService.sendEmailVerification(employeeUser.email, plainOTP);
                 if (!sendEmailResult) {
                     throw new Error("Error sending email verification!");
                 }
@@ -279,9 +280,10 @@ let EmployeeUserService = EmployeeUserService_1 = class EmployeeUserService {
             if (employeeUser.accessGranted) {
                 throw new common_1.HttpException("Employee user already has access granted!", common_1.HttpStatus.BAD_REQUEST);
             }
-            employeeUser.invitationCode = (0, utils_1.generateOTP)();
+            const plainOTP = (0, utils_1.generateOTP)();
+            employeeUser.invitationCode = await (0, utils_1.hash)(plainOTP);
             employeeUser = await entityManager.save(EmployeeUsers_1.EmployeeUsers, employeeUser);
-            const sendEmailResult = await this.emailService.sendEmailVerification(employeeUser.email, employeeUser.invitationCode);
+            const sendEmailResult = await this.emailService.sendEmailVerification(employeeUser.email, plainOTP);
             if (!sendEmailResult) {
                 throw new Error("Error sending email verification!");
             }

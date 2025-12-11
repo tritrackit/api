@@ -43,8 +43,7 @@ let EmailService = EmailService_1 = class EmailService {
             });
             let emailTemplate = await (0, promises_1.readFile)(path_1.default.join(__dirname, evTempPath), "utf-8");
             emailTemplate = emailTemplate.replace("{{_OTP_}}", otp);
-            const hastOTP = await (0, utils_1.hash)(otp);
-            emailTemplate = emailTemplate.replace("{{_URL_}}", `${evVerifyURL}?email=${recipient}&code=${hastOTP}`);
+            emailTemplate = emailTemplate.replace("{{_URL_}}", `${evVerifyURL}?email=${recipient}&code=${otp}`);
             emailTemplate = emailTemplate.replace("{{_YEAR_}}", new Date().getFullYear().toString());
             const replacements = {
                 "{{_COMPANY_}}": evCompany,

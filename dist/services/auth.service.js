@@ -95,7 +95,27 @@ let AuthService = class AuthService {
             if (employeeUser.accessGranted) {
                 throw Error("The user has already been granted role!");
             }
-            const codeMatch = await (0, utils_1.compare)(hashCode, employeeUser.invitationCode);
+            let codeMatch = false;
+            const urlCodeIsHashed = hashCode &&
+                (hashCode.startsWith('$2a$') ||
+                    hashCode.startsWith('$2b$') ||
+                    hashCode.startsWith('$2y$'));
+            const dbCodeIsHashed = employeeUser.invitationCode &&
+                (employeeUser.invitationCode.startsWith('$2a$') ||
+                    employeeUser.invitationCode.startsWith('$2b$') ||
+                    employeeUser.invitationCode.startsWith('$2y$'));
+            if (urlCodeIsHashed && dbCodeIsHashed) {
+                codeMatch = hashCode === employeeUser.invitationCode;
+            }
+            else if (!urlCodeIsHashed && dbCodeIsHashed) {
+                codeMatch = await (0, utils_1.compare)(hashCode, employeeUser.invitationCode);
+            }
+            else if (!urlCodeIsHashed && !dbCodeIsHashed) {
+                codeMatch = hashCode === employeeUser.invitationCode;
+            }
+            else {
+                codeMatch = false;
+            }
             if (!codeMatch) {
                 throw Error(auth_error_constant_1.VERFICATION_ERROR_CODE_INCORRECT);
             }

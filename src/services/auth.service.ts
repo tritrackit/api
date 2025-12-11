@@ -114,23 +114,42 @@ export class AuthService {
       if (employeeUser.accessGranted) {
         throw Error("The user has already been granted role!");
       }
-      // hashCode from URL is now plain OTP (email service sends plain OTP)
-      // employeeUser.invitationCode in DB might be hashed (new users) or plain (old users)
-      // Try bcrypt.compare first (for hashed codes), fallback to direct comparison (for plain codes)
+      // Handle multiple scenarios:
+      // 1. New users: hashed code in DB, plain OTP in URL (after fix)
+      // 2. Old emails: hashed code in URL, hashed code in DB (both hashed - need to compare hashes directly)
+      // 3. Very old users: plain code in DB, plain code in URL
       let codeMatch = false;
       
-      // Check if invitationCode looks like a bcrypt hash (starts with $2a$, $2b$, or $2y$)
-      const isHashed = employeeUser.invitationCode && 
+      // Check if hashCode from URL is a bcrypt hash
+      const urlCodeIsHashed = hashCode && 
+        (hashCode.startsWith('$2a$') || 
+         hashCode.startsWith('$2b$') || 
+         hashCode.startsWith('$2y$'));
+      
+      // Check if invitationCode in DB is a bcrypt hash
+      const dbCodeIsHashed = employeeUser.invitationCode && 
         (employeeUser.invitationCode.startsWith('$2a$') || 
          employeeUser.invitationCode.startsWith('$2b$') || 
          employeeUser.invitationCode.startsWith('$2y$'));
       
-      if (isHashed) {
-        // New format: hashed code in DB, plain OTP in URL
-        codeMatch = await compare(hashCode, employeeUser.invitationCode);
-      } else {
-        // Old format: plain code in DB, plain OTP in URL (backward compatibility)
+      if (urlCodeIsHashed && dbCodeIsHashed) {
+        // Both are hashed - this shouldn't happen normally, but can occur during transition
+        // Bcrypt hashes are salted, so same input = different hash each time
+        // We can't compare them directly. This means:
+        // - Email was sent with OLD code (hashed in URL)
+        // - User was created with NEW code (hashed in DB)
+        // These won't match. User needs to request a new invitation.
+        // For now, try direct comparison (will likely fail, but handles edge case)
         codeMatch = hashCode === employeeUser.invitationCode;
+      } else if (!urlCodeIsHashed && dbCodeIsHashed) {
+        // Plain OTP in URL, hashed in DB (new format after fix)
+        codeMatch = await compare(hashCode, employeeUser.invitationCode);
+      } else if (!urlCodeIsHashed && !dbCodeIsHashed) {
+        // Both plain (very old format)
+        codeMatch = hashCode === employeeUser.invitationCode;
+      } else {
+        // urlCodeIsHashed but dbCodeIsHashed is false - shouldn't happen, but try direct compare
+        codeMatch = false;
       }
       
       if (!codeMatch) {
