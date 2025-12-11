@@ -18,7 +18,7 @@ export class PusherService {
   pusher;
   private batchQueue: Map<string, Map<string, BatchedEvent>> = new Map();
   private batchTimers: Map<string, NodeJS.Timeout> = new Map();
-  private readonly BATCH_DELAY_MS = 100;
+  private readonly BATCH_DELAY_MS = 10; // ⚡ Reduced from 100ms to 10ms for faster updates
   
   constructor(private readonly config: ConfigService) {
     const appId = this.config.get<string>("PUSHER_APPID");
@@ -89,14 +89,15 @@ export class PusherService {
 
   /**
    * ReSync event - non-blocking for better performance
-   * RFID events sent immediately, other events batched with 100ms delay
+   * Urgent/RFID events sent immediately, other events batched with 10ms delay
    * If same RFID is updated multiple times, only latest state is sent
    */
-  reSync(type: string, data: any): void {
+  reSync(type: string, data: any, urgent: boolean = false): void {
     try {
-      if (data?.rfid || data?.action?.includes('RFID') || data?.action === 'RFID_DETECTED') {
-        this.logger.debug(`⚡ Sending RFID event immediately (no batching): ${data?.rfid || data?.action}`);
-        this.triggerAsync("all", "reSync", { type, data });
+      // ⚡ URGENT EVENTS: Send immediately, no batching
+      if (urgent || data?.rfid || data?.action?.includes('RFID') || data?.action?.includes('REGISTER') || data?.action === 'RFID_DETECTED') {
+        this.logger.debug(`⚡ URGENT Pusher event: ${data?.action || type} (RFID: ${data?.rfid || 'N/A'})`);
+        this.triggerAsync("all", "reSync", { type, data, _urgent: true });
         return;
       }
 
@@ -241,6 +242,47 @@ export class PusherService {
       }
     } catch (ex) {
       this.logger.error(`sendRegistrationEventImmediate failed: ${ex.message}`, ex.stack);
+    }
+  }
+
+  /**
+   * ⚡ URGENT: Bypass ALL queues and batching for critical registration events
+   * Use this for registration scanner events that must be delivered immediately
+   */
+  sendRegistrationUrgent(data: {
+    rfid: string;
+    scannerCode: string;
+    timestamp: Date | string;
+    location?: Locations | { name: string; locationId: string };
+    employeeUser?: EmployeeUsers;
+  }): void {
+    const startTime = Date.now();
+    
+    try {
+      this.logger.debug(`⚡ URGENT registration event for RFID: ${data.rfid}`);
+      
+      // ⚡ URGENT: Bypass ALL queues and batching
+      this.pusher.trigger('registration-urgent', 'rfid-detected', {
+        rfid: data.rfid,
+        scannerCode: data.scannerCode,
+        timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()),
+        location: data.location?.name || (data.location as any)?.name || 'Unknown',
+        locationId: data.location?.locationId || (data.location as any)?.locationId,
+        employeeUserCode: data.employeeUser?.employeeUserCode,
+        _sentAt: startTime,
+        _priority: 'highest'
+      }).then(() => {
+        const latency = Date.now() - startTime;
+        this.logger.debug(`⚡ URGENT registration sent: ${latency}ms for RFID: ${data.rfid}`);
+        
+        if (latency > 200) {
+          this.logger.warn(`⚠️ Slow URGENT registration: ${latency}ms`);
+        }
+      }).catch(err => {
+        this.logger.error(`URGENT registration failed: ${err.message}`, err.stack);
+      });
+    } catch (ex) {
+      this.logger.error(`sendRegistrationUrgent failed: ${ex.message}`, ex.stack);
     }
   }
 

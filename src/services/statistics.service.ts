@@ -6,6 +6,8 @@ import { Locations } from 'src/db/entities/Locations';
 import { Status } from 'src/db/entities/Status';
 import { Model } from 'src/db/entities/Model';
 import { StatisticsFilterDto, TimeframeType } from 'src/core/dto/statistics/statistics.dto';
+import { FIXED_LOCATIONS } from 'src/common/constant/locations.constant';
+import { STATUS } from 'src/common/constant/status.constants';
 import moment from 'moment';
 
 @Injectable()
@@ -77,35 +79,43 @@ export class StatisticsService {
     });
 
     let unitsInStorage = 0;
+    
+    // Get STORAGE status - "in storage" is based ONLY on status, not location
+    const storageStatus = await this.statusRepo.findOne({ 
+      where: { statusId: STATUS.STORAGE.toString() },
+      select: ['statusId', 'name']
+    });
+    
+    if (!storageStatus) {
+      // If STORAGE status not found, explicitly set to 0
+      unitsInStorage = 0;
+    } else {
       const hasValidLocationFilter = filters.locationIds?.length && 
         filters.locationIds.some(id => id && id !== "string" && id.trim() !== "");
       
       if (hasValidLocationFilter) {
+        // When location filter is provided, count units in those locations that ALSO have STORAGE status
         const validLocationIds = filters.locationIds.filter(id => id && id !== "string" && id.trim() !== "");
-      unitsInStorage = await this.unitsRepo.count({
-        where: { 
-          active: true,
-            location: { locationId: In(validLocationIds) }
-        }
-      });
-    } else {
-        const warehouseLocationCodes = ['WAREHOUSE_4', 'WAREHOUSE_5', 'OPEN_AREA'];
-        const warehouseLocations = await this.locationsRepo.find({
-          where: { 
-            active: true,
-            locationCode: In(warehouseLocationCodes)
-          }
-        });
         
-        if (warehouseLocations.length > 0) {
-          const warehouseLocationIds = warehouseLocations.map(loc => loc.locationId);
-      unitsInStorage = await this.unitsRepo.count({
-        where: { 
-          active: true,
-              location: { locationId: In(warehouseLocationIds) }
-        }
-      });
-        }
+        unitsInStorage = await this.unitsRepo
+          .createQueryBuilder('unit')
+          .innerJoin('unit.location', 'location')
+          .innerJoin('unit.status', 'status')
+          .where('unit.active = :active', { active: true })
+          .andWhere('location.locationId IN (:...locationIds)', { locationIds: validLocationIds })
+          .andWhere('location.active = :locationActive', { locationActive: true })
+          .andWhere('status.statusId = :storageStatusId', { storageStatusId: storageStatus.statusId })
+          .getCount();
+      } else {
+        // Default: Count ONLY units with STORAGE status (statusId = 2)
+        // Location doesn't matter - only status counts
+        unitsInStorage = await this.unitsRepo
+          .createQueryBuilder('unit')
+          .innerJoin('unit.status', 'status')
+          .where('unit.active = :active', { active: true })
+          .andWhere('status.statusId = :storageStatusId', { storageStatusId: storageStatus.statusId })
+          .getCount();
+      }
     }
 
       const holdStatus = await this.statusRepo.findOne({ where: { name: 'HOLD' } });

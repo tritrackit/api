@@ -301,12 +301,14 @@ let UnitsService = UnitsService_1 = class UnitsService {
             unit.color = dto.color;
             unit.description = dto.description;
             unit.dateCreated = await (0, utils_1.getDate)();
-            const model = await entityManager.findOne(Model_1.Model, {
-                where: { modelId: dto.modelId }
-            });
-            if (!model)
-                throw Error(model_constant_1.MODEL_ERROR_NOT_FOUND);
-            unit.model = model;
+            if (dto.modelId) {
+                const model = await entityManager.findOne(Model_1.Model, {
+                    where: { modelId: dto.modelId }
+                });
+                if (!model)
+                    throw Error(model_constant_1.MODEL_ERROR_NOT_FOUND);
+                unit.model = model;
+            }
             unit.status = status;
             const location = await entityManager.findOne(Locations_1.Locations, {
                 where: { locationId: dto.locationId, active: true }
@@ -339,15 +341,15 @@ let UnitsService = UnitsService_1 = class UnitsService {
         });
     }
     async registerUnit(rfid, scannerCode, additionalData = {}) {
-        return await this.unitsRepo.manager.transaction(async (entityManager) => {
-            var _a;
+        var _a, _b, _c;
+        const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
             const scanner = await entityManager.findOne(Scanner_1.Scanner, {
                 where: {
                     scannerCode,
                     active: true,
                     scannerType: "REGISTRATION"
                 },
-                relations: ["location", "status"]
+                relations: ["location", "status", "assignedEmployeeUser"]
             });
             if (!scanner) {
                 throw Error("Registration scanner not found");
@@ -358,6 +360,9 @@ let UnitsService = UnitsService_1 = class UnitsService {
             if (existingUnit) {
                 throw Error("Unit with this RFID already registered");
             }
+            if (!scanner.assignedEmployeeUser) {
+                throw Error("Registration scanner does not have an assigned employee user");
+            }
             const createUnitDto = new unit_create_dto_1.CreateUnitDto();
             createUnitDto.rfid = rfid;
             createUnitDto.chassisNo = additionalData.chassisNo || `CH-${rfid}`;
@@ -365,9 +370,43 @@ let UnitsService = UnitsService_1 = class UnitsService {
             createUnitDto.description = additionalData.description || `Auto-registered at ${scanner.location.name}`;
             createUnitDto.modelId = additionalData.modelId;
             createUnitDto.locationId = scanner.location.locationId;
-            const result = await this.createWithScannerStatus(createUnitDto, (_a = scanner.assignedEmployeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserId, scanner.status);
-            return this.cleanUnitResponse(result);
+            const unit = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser.employeeUserId, scanner.status);
+            return {
+                unit: this.cleanUnitResponse(unit),
+                scanner: scanner
+            };
         });
+        const unitCacheKey = this.keyUnit(rfid);
+        this.cacheService.del(unitCacheKey);
+        this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
+        if (result.unit && ((_a = result.scanner.assignedEmployeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode)) {
+            const startTime = Date.now();
+            this.pusherService.sendRegistrationEventImmediate({
+                rfid: result.unit.rfid,
+                scannerCode: scannerCode,
+                timestamp: new Date(),
+                location: result.scanner.location,
+                scannerType: result.scanner.scannerType,
+                employeeUser: result.scanner.assignedEmployeeUser
+            }).catch(err => {
+                this.logger.error(`Failed to send immediate registration event: ${err.message}`);
+            });
+            this.pusherService.reSync('units', {
+                rfid: result.unit.rfid,
+                action: 'UNIT_REGISTERED',
+                unitCode: result.unit.unitCode,
+                location: (_b = result.unit.location) === null || _b === void 0 ? void 0 : _b.name,
+                status: (_c = result.unit.status) === null || _c === void 0 ? void 0 : _c.name,
+                timestamp: new Date(),
+                _pusherSentAt: startTime
+            });
+            const latency = Date.now() - startTime;
+            this.logger.debug(`⚡ Registration Pusher events triggered: ${latency}ms for unit: ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
+            if (latency > 500) {
+                this.logger.warn(`⚠️ Slow registration Pusher: ${latency}ms`);
+            }
+        }
+        return result.unit;
     }
     async updateUnitLocation(rfid, scannerCode) {
         const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
@@ -443,14 +482,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         "LOCATION_UPDATED"
             };
         });
-        const unitCacheKey = this.keyUnit(result.unit.rfid);
-        const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
-        const unitCodeCacheKey = cache_constant_1.CacheKeys.units.byCode(result.unit.unitCode);
-        this.cacheService.del(unitCacheKey);
-        this.cacheService.del(lastLogCacheKey);
-        this.cacheService.del(unitCodeCacheKey);
-        this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
-        this.logger.debug(`Cache invalidated for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid}) before Pusher trigger`);
+        this.logger.debug(`Sending Pusher event for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
         this.pusherService.reSync('units', {
             rfid: result.unit.rfid,
             action: result.action,
@@ -461,6 +493,14 @@ let UnitsService = UnitsService_1 = class UnitsService {
             unitCode: result.unit.unitCode,
             timestamp: new Date()
         });
+        const unitCacheKey = this.keyUnit(result.unit.rfid);
+        const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
+        const unitCodeCacheKey = cache_constant_1.CacheKeys.units.byCode(result.unit.unitCode);
+        this.cacheService.del(unitCacheKey);
+        this.cacheService.del(lastLogCacheKey);
+        this.cacheService.del(unitCodeCacheKey);
+        this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
+        this.logger.debug(`Cache invalidated for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid}) after Pusher trigger`);
         return this.cleanLocationUpdateResponse(result);
     }
     async update(unitCode, dto, updatedByUserId) {
@@ -831,7 +871,9 @@ let UnitsService = UnitsService_1 = class UnitsService {
         if (cached !== undefined)
             return cached;
         const unit = await em.findOne(Units_1.Units, { where: { rfid, active: true }, relations: ["location", "status", "model"] });
-        this.cacheService.set(key, unit !== null && unit !== void 0 ? unit : null, { ttlSeconds: 2 });
+        if (unit) {
+            this.cacheService.set(key, unit, { ttlSeconds: 2 });
+        }
         return unit !== null && unit !== void 0 ? unit : null;
     }
     async getLastLogCached(em, rfid) {
@@ -852,33 +894,71 @@ let UnitsService = UnitsService_1 = class UnitsService {
         return lastLog !== null && lastLog !== void 0 ? lastLog : null;
     }
     async unitLogs(logsDto, scannerCode) {
-        var _a;
+        var _a, _b;
         this.logger.debug('=== DEBUG unitLogs START ===');
         this.logger.debug(`Scanner Code: ${scannerCode}`);
         this.logger.debug(`Data received: ${JSON.stringify(logsDto.data)}`);
+        if (!((_a = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _a === void 0 ? void 0 : _a.length)) {
+            this.logger.warn('No data in logsDto');
+            return [];
+        }
+        const scanner = await this.getScannerCached(this.unitsRepo.manager, scannerCode);
+        this.logger.debug(`Scanner found: ${scanner === null || scanner === void 0 ? void 0 : scanner.name}`);
+        this.logger.debug(`Scanner Type: ${scanner === null || scanner === void 0 ? void 0 : scanner.scannerType}`);
+        if (!scanner) {
+            this.logger.warn('Scanner not found!');
+            return [];
+        }
+        const immediateNotifications = [];
+        const alreadyNotifiedRfids = new Set();
+        if (scanner.scannerType === "REGISTRATION") {
+            for (const log of logsDto.data) {
+                const rfid = String(log.rfid);
+                const unit = await this.getUnitCached(this.unitsRepo.manager, rfid);
+                if (!unit) {
+                    immediateNotifications.push({
+                        rfid,
+                        timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp || Date.now())
+                    });
+                    alreadyNotifiedRfids.add(rfid);
+                }
+            }
+            if (immediateNotifications.length > 0) {
+                this.logger.debug(`⚡ Sending ${immediateNotifications.length} IMMEDIATE registration notifications (outside transaction)...`);
+                immediateNotifications.forEach((notif) => {
+                    const unitCacheKey = this.keyUnit(notif.rfid);
+                    this.cacheService.del(unitCacheKey);
+                    this.pusherService.sendRegistrationUrgent({
+                        rfid: notif.rfid,
+                        scannerCode: scannerCode,
+                        timestamp: notif.timestamp,
+                        location: scanner.location,
+                        employeeUser: scanner.assignedEmployeeUser
+                    });
+                    this.pusherService.sendRegistrationEventImmediate({
+                        rfid: notif.rfid,
+                        scannerCode: scannerCode,
+                        timestamp: notif.timestamp,
+                        location: scanner.location,
+                        scannerType: scanner.scannerType,
+                        employeeUser: scanner.assignedEmployeeUser
+                    }).catch(err => {
+                        this.logger.error(`Failed to send immediate notification for RFID ${notif.rfid}: ${err.message}`);
+                    });
+                });
+            }
+        }
         const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2;
             const unitLogs = [];
             const registerEvents = [];
-            if (!((_a = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _a === void 0 ? void 0 : _a.length)) {
-                this.logger.warn('No data in logsDto');
-                return { unitLogs, rfidsToNotify: [], registerEvents: [] };
-            }
-            const scanner = await this.getScannerCached(entityManager, scannerCode);
-            this.logger.debug(`Scanner found: ${scanner === null || scanner === void 0 ? void 0 : scanner.name}`);
-            this.logger.debug(`Scanner Type: ${scanner === null || scanner === void 0 ? void 0 : scanner.scannerType}`);
-            this.logger.debug(`Scanner Location: ${(_b = scanner === null || scanner === void 0 ? void 0 : scanner.location) === null || _b === void 0 ? void 0 : _b.name}`);
-            this.logger.debug(`Scanner Status: ${(_c = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _c === void 0 ? void 0 : _c.name} (${(_d = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _d === void 0 ? void 0 : _d.statusId})`);
-            if (!scanner) {
-                this.logger.warn('Scanner not found!');
-                return { unitLogs: [], rfidsToNotify: [], registerEvents: [] };
-            }
+            const locationUpdatedRfids = new Set();
             const unitMemo = new Map();
             const lastLogMemo = new Map();
             for (const log of logsDto.data) {
                 const rfid = String(log.rfid);
                 this.logger.debug(`=== Processing RFID: ${rfid} ===`);
-                let unit = (_e = unitMemo.get(rfid)) !== null && _e !== void 0 ? _e : null;
+                let unit = (_a = unitMemo.get(rfid)) !== null && _a !== void 0 ? _a : null;
                 if (unit === null && !unitMemo.has(rfid)) {
                     unit = await this.getUnitCached(entityManager, rfid);
                     unitMemo.set(rfid, unit);
@@ -886,12 +966,15 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 this.logger.debug(`Unit exists? ${!!unit}`);
                 if (unit) {
                     this.logger.debug(`Unit Code: ${unit.unitCode}`);
-                    this.logger.debug(`Current Location: ${(_f = unit.location) === null || _f === void 0 ? void 0 : _f.name} (${(_g = unit.location) === null || _g === void 0 ? void 0 : _g.locationId})`);
-                    this.logger.debug(`Current Status: ${(_h = unit.status) === null || _h === void 0 ? void 0 : _h.name} (${(_j = unit.status) === null || _j === void 0 ? void 0 : _j.statusId})`);
+                    this.logger.debug(`Current Location: ${(_b = unit.location) === null || _b === void 0 ? void 0 : _b.name} (${(_c = unit.location) === null || _c === void 0 ? void 0 : _c.locationId})`);
+                    this.logger.debug(`Current Status: ${(_d = unit.status) === null || _d === void 0 ? void 0 : _d.name} (${(_e = unit.status) === null || _e === void 0 ? void 0 : _e.statusId})`);
                 }
                 if (!unit) {
+                    if (alreadyNotifiedRfids.has(rfid) && scanner.scannerType === "REGISTRATION") {
+                        this.logger.debug(`RFID ${rfid} already notified outside transaction, skipping`);
+                        continue;
+                    }
                     if (scanner.scannerType === "REGISTRATION") {
-                        this.logger.debug(`Registration scanner - sending registration event for new RFID`);
                         registerEvents.push({
                             rfid,
                             scannerCode,
@@ -908,32 +991,39 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 if (scanner.scannerType === "LOCATION") {
                     try {
                         this.logger.debug(`Calling updateUnitLocation() for location scanner...`);
-                        await this.updateUnitLocation(rfid, scannerCode);
+                        const locationUpdateResult = await this.updateUnitLocation(rfid, scannerCode);
                         this.logger.debug(`updateUnitLocation() success - Pusher triggered automatically`);
+                        const unitCacheKey = this.keyUnit(rfid);
+                        const lastLogCacheKey = this.keyLastLog(rfid);
+                        this.cacheService.del(unitCacheKey);
+                        this.cacheService.del(lastLogCacheKey);
+                        unitMemo.set(rfid, locationUpdateResult.unit);
+                        locationUpdatedRfids.add(rfid);
                         continue;
                     }
                     catch (error) {
                         this.logger.error(`updateUnitLocation() failed: ${error.message}`, error.stack);
+                        continue;
                     }
                 }
-                let lastLog = (_k = lastLogMemo.get(rfid)) !== null && _k !== void 0 ? _k : null;
+                let lastLog = (_f = lastLogMemo.get(rfid)) !== null && _f !== void 0 ? _f : null;
                 if (lastLog === null && !lastLogMemo.has(rfid)) {
                     lastLog = await this.getLastLogCached(entityManager, rfid);
                     lastLogMemo.set(rfid, lastLog);
                 }
-                this.logger.debug(`Last Log Status: ${(_l = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _l === void 0 ? void 0 : _l.name} (${(_m = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _m === void 0 ? void 0 : _m.statusId})`);
-                this.logger.debug(`Last Log Location: ${(_o = lastLog === null || lastLog === void 0 ? void 0 : lastLog.location) === null || _o === void 0 ? void 0 : _o.name}`);
-                const newStatusId = Number((_p = scanner.status) === null || _p === void 0 ? void 0 : _p.statusId);
-                this.logger.debug(`Scanner New Status: ${(_q = scanner.status) === null || _q === void 0 ? void 0 : _q.name} (${newStatusId})`);
-                this.logger.debug(`Scanner New Location: ${(_r = scanner.location) === null || _r === void 0 ? void 0 : _r.name} (${(_s = scanner.location) === null || _s === void 0 ? void 0 : _s.locationId})`);
+                this.logger.debug(`Last Log Status: ${(_g = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _g === void 0 ? void 0 : _g.name} (${(_h = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _h === void 0 ? void 0 : _h.statusId})`);
+                this.logger.debug(`Last Log Location: ${(_j = lastLog === null || lastLog === void 0 ? void 0 : lastLog.location) === null || _j === void 0 ? void 0 : _j.name}`);
+                const newStatusId = Number((_k = scanner.status) === null || _k === void 0 ? void 0 : _k.statusId);
+                this.logger.debug(`Scanner New Status: ${(_l = scanner.status) === null || _l === void 0 ? void 0 : _l.name} (${newStatusId})`);
+                this.logger.debug(`Scanner New Location: ${(_m = scanner.location) === null || _m === void 0 ? void 0 : _m.name} (${(_o = scanner.location) === null || _o === void 0 ? void 0 : _o.locationId})`);
                 if (!newStatusId) {
                     this.logger.warn('No status ID found in scanner, skipping');
                     continue;
                 }
-                const isSameLocation = ((_t = unit.location) === null || _t === void 0 ? void 0 : _t.locationId) === ((_u = scanner.location) === null || _u === void 0 ? void 0 : _u.locationId);
+                const isSameLocation = ((_p = unit.location) === null || _p === void 0 ? void 0 : _p.locationId) === ((_q = scanner.location) === null || _q === void 0 ? void 0 : _q.locationId);
                 this.logger.debug(`Same location? ${isSameLocation}`);
                 if (scanner.scannerType === "REGISTRATION") {
-                    const prevStatusId = (_w = Number((_v = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _v === void 0 ? void 0 : _v.statusId)) !== null && _w !== void 0 ? _w : status_constants_1.STATUS.FOR_DELIVERY;
+                    const prevStatusId = (_s = Number((_r = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _r === void 0 ? void 0 : _r.statusId)) !== null && _s !== void 0 ? _s : status_constants_1.STATUS.FOR_DELIVERY;
                     const isForward = prevStatusId === null || newStatusId > prevStatusId;
                     this.logger.debug(`Registration scanner - Is Forward? ${isForward} (${prevStatusId} → ${newStatusId})`);
                     if (!isForward) {
@@ -944,23 +1034,23 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 else {
                     this.logger.debug(`Location scanner - allowing any status change`);
                 }
-                const shouldCreateLog = !isSameLocation || (((_x = unit.status) === null || _x === void 0 ? void 0 : _x.statusId) !== ((_y = scanner.status) === null || _y === void 0 ? void 0 : _y.statusId));
+                const shouldCreateLog = !isSameLocation || (((_t = unit.status) === null || _t === void 0 ? void 0 : _t.statusId) !== ((_u = scanner.status) === null || _u === void 0 ? void 0 : _u.statusId));
                 this.logger.debug(`Should create UnitLog? ${shouldCreateLog}`);
                 this.logger.debug(`  - Location changed? ${!isSameLocation}`);
-                this.logger.debug(`  - Status changed? ${((_z = unit.status) === null || _z === void 0 ? void 0 : _z.statusId) !== ((_0 = scanner.status) === null || _0 === void 0 ? void 0 : _0.statusId)}`);
+                this.logger.debug(`  - Status changed? ${((_v = unit.status) === null || _v === void 0 ? void 0 : _v.statusId) !== ((_w = scanner.status) === null || _w === void 0 ? void 0 : _w.statusId)}`);
                 if (!shouldCreateLog) {
                     this.logger.debug(`No change needed - unit already at this location/status`);
                     continue;
                 }
                 this.logger.debug(`Creating UnitLog:`);
-                this.logger.debug(`  Location: ${(_1 = unit.location) === null || _1 === void 0 ? void 0 : _1.name} → ${(_2 = scanner.location) === null || _2 === void 0 ? void 0 : _2.name}`);
-                this.logger.debug(`  Status: ${(_3 = unit.status) === null || _3 === void 0 ? void 0 : _3.name} → ${(_4 = scanner.status) === null || _4 === void 0 ? void 0 : _4.name}`);
-                this.logger.debug(`  Employee: ${(_5 = scanner.assignedEmployeeUser) === null || _5 === void 0 ? void 0 : _5.employeeUserCode}`);
+                this.logger.debug(`  Location: ${(_x = unit.location) === null || _x === void 0 ? void 0 : _x.name} → ${(_y = scanner.location) === null || _y === void 0 ? void 0 : _y.name}`);
+                this.logger.debug(`  Status: ${(_z = unit.status) === null || _z === void 0 ? void 0 : _z.name} → ${(_0 = scanner.status) === null || _0 === void 0 ? void 0 : _0.name}`);
+                this.logger.debug(`  Employee: ${(_1 = scanner.assignedEmployeeUser) === null || _1 === void 0 ? void 0 : _1.employeeUserCode}`);
                 const unitLog = new UnitLogs_1.UnitLogs();
                 unitLog.timestamp = new Date(log.timestamp);
                 unitLog.unit = unit;
                 unitLog.status = scanner.status;
-                unitLog.prevStatus = (_6 = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) !== null && _6 !== void 0 ? _6 : null;
+                unitLog.prevStatus = (_2 = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) !== null && _2 !== void 0 ? _2 : null;
                 unitLog.location = scanner.location;
                 unitLog.employeeUser = scanner.assignedEmployeeUser;
                 unitLogs.push(unitLog);
@@ -976,7 +1066,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
             else {
                 this.logger.debug(`No UnitLogs to save`);
             }
-            const rfidsToNotify = Array.from(new Set(unitLogs.map((l) => l.unit.rfid)));
+            const rfidsToNotify = Array.from(new Set(unitLogs.map((l) => l.unit.rfid).filter(rfid => !locationUpdatedRfids.has(rfid))));
             const dedup = new Set();
             const uniqueRegisterEvents = registerEvents.filter((e) => {
                 const k = `${e.rfid}|${e.scannerCode}`;
@@ -1000,16 +1090,40 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         rfid: rfid,
                         action: 'LOCATION_UPDATED',
                         timestamp: new Date()
-                    });
+                    }, true);
                 });
             }
             if (result.registerEvents && result.registerEvents.length > 0) {
                 this.logger.debug(`Triggering ${result.registerEvents.length} registration events via Pusher (non-blocking)...`);
                 result.registerEvents
-                    .filter((e) => { var _a; return !!((_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode); })
-                    .forEach((e) => {
+                    .filter((e) => {
                     var _a;
-                    this.pusherService.sendTriggerRegister((_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode, e);
+                    const hasEmployeeCode = !!((_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode);
+                    if (!hasEmployeeCode) {
+                        this.logger.warn(`Registration event filtered out - missing employeeUserCode for RFID: ${e.rfid}`);
+                    }
+                    return hasEmployeeCode;
+                })
+                    .forEach((e) => {
+                    var _a, _b, _c, _d, _e;
+                    this.logger.debug(`⚡ Sending registration event for RFID: ${e.rfid}, Employee: ${(_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode}`);
+                    const unitCacheKey = this.keyUnit(e.rfid);
+                    this.cacheService.del(unitCacheKey);
+                    const reSyncData = {
+                        rfid: e.rfid,
+                        action: 'RFID_DETECTED',
+                        scannerCode: e.scannerCode,
+                        location: (_b = e.location) === null || _b === void 0 ? void 0 : _b.name,
+                        locationId: (_c = e.location) === null || _c === void 0 ? void 0 : _c.locationId,
+                        employeeUserCode: (_d = e.employeeUser) === null || _d === void 0 ? void 0 : _d.employeeUserCode,
+                        timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now())
+                    };
+                    Promise.all([
+                        Promise.resolve(this.pusherService.sendTriggerRegister((_e = e.employeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode, e)),
+                        Promise.resolve(this.pusherService.reSync('units', reSyncData, true))
+                    ]).catch(err => {
+                        this.logger.error(`Failed to send parallel registration events: ${err.message}`);
+                    });
                 });
             }
             this.logger.debug(`All Pusher events triggered`);
@@ -1017,9 +1131,9 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 const rfidsToUpdate = Array.from(new Set(result.unitLogs.map((l) => l.unit.rfid)));
                 this.logger.debug(`Updating cache for ${rfidsToUpdate.length} RFIDs`);
                 for (const rfid of rfidsToUpdate) {
-                    const newest = (_a = result.unitLogs
+                    const newest = (_b = result.unitLogs
                         .filter((l) => l.unit.rfid === rfid)
-                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _a !== void 0 ? _a : null;
+                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _b !== void 0 ? _b : null;
                     this.cacheService.set(this.keyLastLog(rfid), newest, {
                         ttlSeconds: 1,
                     });

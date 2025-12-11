@@ -24,6 +24,7 @@ const Locations_1 = require("../db/entities/Locations");
 const Status_1 = require("../db/entities/Status");
 const Model_1 = require("../db/entities/Model");
 const statistics_dto_1 = require("../core/dto/statistics/statistics.dto");
+const status_constants_1 = require("../common/constant/status.constants");
 const moment_1 = __importDefault(require("moment"));
 let StatisticsService = class StatisticsService {
     constructor(unitsRepo, locationsRepo, statusRepo, modelRepo) {
@@ -81,33 +82,35 @@ let StatisticsService = class StatisticsService {
                 where: { active: true }
             });
             let unitsInStorage = 0;
-            const hasValidLocationFilter = ((_a = filters.locationIds) === null || _a === void 0 ? void 0 : _a.length) &&
-                filters.locationIds.some(id => id && id !== "string" && id.trim() !== "");
-            if (hasValidLocationFilter) {
-                const validLocationIds = filters.locationIds.filter(id => id && id !== "string" && id.trim() !== "");
-                unitsInStorage = await this.unitsRepo.count({
-                    where: {
-                        active: true,
-                        location: { locationId: (0, typeorm_2.In)(validLocationIds) }
-                    }
-                });
+            const storageStatus = await this.statusRepo.findOne({
+                where: { statusId: status_constants_1.STATUS.STORAGE.toString() },
+                select: ['statusId', 'name']
+            });
+            if (!storageStatus) {
+                unitsInStorage = 0;
             }
             else {
-                const warehouseLocationCodes = ['WAREHOUSE_4', 'WAREHOUSE_5', 'OPEN_AREA'];
-                const warehouseLocations = await this.locationsRepo.find({
-                    where: {
-                        active: true,
-                        locationCode: (0, typeorm_2.In)(warehouseLocationCodes)
-                    }
-                });
-                if (warehouseLocations.length > 0) {
-                    const warehouseLocationIds = warehouseLocations.map(loc => loc.locationId);
-                    unitsInStorage = await this.unitsRepo.count({
-                        where: {
-                            active: true,
-                            location: { locationId: (0, typeorm_2.In)(warehouseLocationIds) }
-                        }
-                    });
+                const hasValidLocationFilter = ((_a = filters.locationIds) === null || _a === void 0 ? void 0 : _a.length) &&
+                    filters.locationIds.some(id => id && id !== "string" && id.trim() !== "");
+                if (hasValidLocationFilter) {
+                    const validLocationIds = filters.locationIds.filter(id => id && id !== "string" && id.trim() !== "");
+                    unitsInStorage = await this.unitsRepo
+                        .createQueryBuilder('unit')
+                        .innerJoin('unit.location', 'location')
+                        .innerJoin('unit.status', 'status')
+                        .where('unit.active = :active', { active: true })
+                        .andWhere('location.locationId IN (:...locationIds)', { locationIds: validLocationIds })
+                        .andWhere('location.active = :locationActive', { locationActive: true })
+                        .andWhere('status.statusId = :storageStatusId', { storageStatusId: storageStatus.statusId })
+                        .getCount();
+                }
+                else {
+                    unitsInStorage = await this.unitsRepo
+                        .createQueryBuilder('unit')
+                        .innerJoin('unit.status', 'status')
+                        .where('unit.active = :active', { active: true })
+                        .andWhere('status.statusId = :storageStatusId', { storageStatusId: storageStatus.statusId })
+                        .getCount();
                 }
             }
             const holdStatus = await this.statusRepo.findOne({ where: { name: 'HOLD' } });
