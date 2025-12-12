@@ -25,9 +25,15 @@ const units_module_1 = require("./controller/unit/units.module");
 const statistics_module_1 = require("./controller/statistics/statistics.module");
 const cache_service_1 = require("./services/cache.service");
 const cache_module_1 = require("./core/cache/cache.module");
+const performance_middleware_1 = require("./core/middleware/performance.middleware");
 let AppModule = class AppModule {
     constructor(cache) {
         this.cache = cache;
+    }
+    configure(consumer) {
+        consumer
+            .apply(performance_middleware_1.PerformanceMiddleware)
+            .forRoutes('units');
     }
     onApplicationBootstrap() {
         if (process.env.NODE_ENV !== "production") {

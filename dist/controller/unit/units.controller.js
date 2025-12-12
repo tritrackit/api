@@ -126,9 +126,13 @@ let UnitsController = class UnitsController {
         }
     }
     async registerUnit(dto) {
+        var _a, _b;
         const res = {};
+        const requestStart = Date.now();
         try {
-            res.data = await this.unitsService.registerUnit(dto.rfid, dto.scannerCode, {
+            const transactionId = `tx_${requestStart}_${Math.random().toString(36).substr(2, 9)}`;
+            const predictiveSentAt = Date.now();
+            res.data = await this.unitsService.registerUnitUltraFast(dto.rfid, dto.scannerCode, {
                 chassisNo: dto.chassisNo,
                 color: dto.color,
                 description: dto.description,
@@ -136,11 +140,36 @@ let UnitsController = class UnitsController {
             });
             res.success = true;
             res.message = `Unit ${api_response_constant_1.SAVING_SUCCESS}`;
+            if (res.data) {
+                res.data.metadata = {
+                    transactionId,
+                    requestStart,
+                    predictiveSentAt,
+                    responseTime: Date.now() - requestStart,
+                    expectedChannels: ['registration-urgent', 'all'],
+                    expectedEvents: ['rfid-detected', 'reSync'],
+                    pusherAction: 'UNIT_REGISTERING_PREDICTIVE',
+                    _ultraFastMode: true,
+                    _predictiveUI: true
+                };
+            }
             return res;
         }
         catch (e) {
+            const errorTransactionId = `err_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            try {
+                (_b = (_a = this.unitsService).sendRegistrationFailed) === null || _b === void 0 ? void 0 : _b.call(_a, dto.rfid, errorTransactionId, e.message);
+            }
+            catch (notifError) {
+            }
             res.success = false;
             res.message = e.message !== undefined ? e.message : e;
+            res.metadata = {
+                errorTransactionId,
+                requestStart,
+                responseTime: Date.now() - requestStart,
+                error: e.message
+            };
             return res;
         }
     }

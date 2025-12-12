@@ -30,6 +30,18 @@ export declare class UnitsService {
     private cleanLocation;
     private cleanLocationUpdateResponse;
     private createWithScannerStatus;
+    registerUnitUltraFast(rfid: string, scannerCode: string, additionalData?: {
+        chassisNo?: string;
+        color?: string;
+        description?: string;
+        modelId?: string;
+    }): Promise<any>;
+    private sendPredictiveNotification;
+    private executeMinimalTransaction;
+    private clearCacheImmediately;
+    private sendConfirmedNotificationAsync;
+    private handleAsyncPostRegistration;
+    private sendRegistrationFailed;
     registerUnit(rfid: string, scannerCode: string, additionalData?: {
         chassisNo?: string;
         color?: string;

@@ -89,16 +89,41 @@ export class PusherService {
 
   /**
    * ReSync event - non-blocking for better performance
-   * Urgent/RFID events sent immediately, other events batched with 10ms delay
+   * Urgent/RFID events sent immediately with ZERO delay, other events batched with 10ms delay
    * If same RFID is updated multiple times, only latest state is sent
    */
   reSync(type: string, data: any, urgent: boolean = false): void {
     try {
-      // ⚡ URGENT EVENTS: Send immediately, no batching
+      // ⚡ URGENT/RFID EVENTS: SEND IMMEDIATELY, NO BATCHING, NO DELAY
       if (urgent || data?.rfid || data?.action?.includes('RFID') || data?.action?.includes('REGISTER') || data?.action === 'RFID_DETECTED') {
-        this.logger.debug(`⚡ URGENT Pusher event: ${data?.action || type} (RFID: ${data?.rfid || 'N/A'})`);
-        this.triggerAsync("all", "reSync", { type, data, _urgent: true });
-        return;
+        const startTime = Date.now();
+        const channel = "all";
+        const event = "reSync";
+        
+        this.logger.debug(`⚡ URGENT Pusher: ${data?.action || 'RFID event'} (0ms delay)`);
+        
+        // ⚡ DIRECT TRIGGER - No promises, no awaits, fire and forget
+        this.pusher.trigger(channel, event, {
+          type,
+          data: {
+            ...data,
+            _pusherSentAt: startTime,
+            _urgent: true,
+            _zeroDelay: true
+          }
+        }).then(() => {
+          const latency = Date.now() - startTime;
+          this.logger.debug(`⚡ URGENT Pusher sent: ${latency}ms`);
+          
+          if (latency > 50) {
+            this.logger.warn(`⚠️ High Pusher latency: ${latency}ms for RFID event`);
+          }
+        }).catch(err => {
+          // Silent fail - don't throw, don't log error for real-time
+          this.logger.debug(`Pusher trigger failed (non-critical): ${err.message}`);
+        });
+        
+        return; // ⚡ EXIT IMMEDIATELY - don't enter batching logic at all
       }
 
       const batchKey = type;
@@ -249,20 +274,15 @@ export class PusherService {
    * ⚡ URGENT: Bypass ALL queues and batching for critical registration events
    * Use this for registration scanner events that must be delivered immediately
    */
-  sendRegistrationUrgent(data: {
-    rfid: string;
-    scannerCode: string;
-    timestamp: Date | string;
-    location?: Locations | { name: string; locationId: string };
-    employeeUser?: EmployeeUsers;
-  }): void {
+  sendRegistrationUrgent(data: any): void {
     const startTime = Date.now();
     
     try {
-      this.logger.debug(`⚡ URGENT registration event for RFID: ${data.rfid}`);
+      this.logger.debug(`⚡ URGENT registration event: ${data.rfid}`);
       
-      // ⚡ URGENT: Bypass ALL queues and batching
+      // ⚡ Bypass ALL queues and batching
       this.pusher.trigger('registration-urgent', 'rfid-detected', {
+        ...data,
         rfid: data.rfid,
         scannerCode: data.scannerCode,
         timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()),
@@ -270,16 +290,17 @@ export class PusherService {
         locationId: data.location?.locationId || (data.location as any)?.locationId,
         employeeUserCode: data.employeeUser?.employeeUserCode,
         _sentAt: startTime,
-        _priority: 'highest'
+        _priority: 'highest',
+        _zeroDelay: true
       }).then(() => {
         const latency = Date.now() - startTime;
-        this.logger.debug(`⚡ URGENT registration sent: ${latency}ms for RFID: ${data.rfid}`);
+        this.logger.debug(`⚡ URGENT registration sent: ${latency}ms`);
         
-        if (latency > 200) {
+        if (latency > 30) {
           this.logger.warn(`⚠️ Slow URGENT registration: ${latency}ms`);
         }
       }).catch(err => {
-        this.logger.error(`URGENT registration failed: ${err.message}`, err.stack);
+        this.logger.debug(`URGENT registration failed (non-critical): ${err.message}`);
       });
     } catch (ex) {
       this.logger.error(`sendRegistrationUrgent failed: ${ex.message}`, ex.stack);

@@ -32,16 +32,7 @@ export declare class PusherService {
         scannerType?: string;
         employeeUser?: EmployeeUsers;
     }): Promise<void>;
-    sendRegistrationUrgent(data: {
-        rfid: string;
-        scannerCode: string;
-        timestamp: Date | string;
-        location?: Locations | {
-            name: string;
-            locationId: string;
-        };
-        employeeUser?: EmployeeUsers;
-    }): void;
+    sendRegistrationUrgent(data: any): void;
     sendTriggerRegisterAwait(employeeUserCode: string, data: {
         rfid: string;
         scannerCode: string;

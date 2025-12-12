@@ -78,8 +78,22 @@ let PusherService = PusherService_1 = class PusherService {
         var _a, _b;
         try {
             if (urgent || (data === null || data === void 0 ? void 0 : data.rfid) || ((_a = data === null || data === void 0 ? void 0 : data.action) === null || _a === void 0 ? void 0 : _a.includes('RFID')) || ((_b = data === null || data === void 0 ? void 0 : data.action) === null || _b === void 0 ? void 0 : _b.includes('REGISTER')) || (data === null || data === void 0 ? void 0 : data.action) === 'RFID_DETECTED') {
-                this.logger.debug(`⚡ URGENT Pusher event: ${(data === null || data === void 0 ? void 0 : data.action) || type} (RFID: ${(data === null || data === void 0 ? void 0 : data.rfid) || 'N/A'})`);
-                this.triggerAsync("all", "reSync", { type, data, _urgent: true });
+                const startTime = Date.now();
+                const channel = "all";
+                const event = "reSync";
+                this.logger.debug(`⚡ URGENT Pusher: ${(data === null || data === void 0 ? void 0 : data.action) || 'RFID event'} (0ms delay)`);
+                this.pusher.trigger(channel, event, {
+                    type,
+                    data: Object.assign(Object.assign({}, data), { _pusherSentAt: startTime, _urgent: true, _zeroDelay: true })
+                }).then(() => {
+                    const latency = Date.now() - startTime;
+                    this.logger.debug(`⚡ URGENT Pusher sent: ${latency}ms`);
+                    if (latency > 50) {
+                        this.logger.warn(`⚠️ High Pusher latency: ${latency}ms for RFID event`);
+                    }
+                }).catch(err => {
+                    this.logger.debug(`Pusher trigger failed (non-critical): ${err.message}`);
+                });
                 return;
             }
             const batchKey = type;
@@ -200,24 +214,15 @@ let PusherService = PusherService_1 = class PusherService {
         var _a, _b, _c, _d, _e;
         const startTime = Date.now();
         try {
-            this.logger.debug(`⚡ URGENT registration event for RFID: ${data.rfid}`);
-            this.pusher.trigger('registration-urgent', 'rfid-detected', {
-                rfid: data.rfid,
-                scannerCode: data.scannerCode,
-                timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()),
-                location: ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || ((_b = data.location) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown',
-                locationId: ((_c = data.location) === null || _c === void 0 ? void 0 : _c.locationId) || ((_d = data.location) === null || _d === void 0 ? void 0 : _d.locationId),
-                employeeUserCode: (_e = data.employeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode,
-                _sentAt: startTime,
-                _priority: 'highest'
-            }).then(() => {
+            this.logger.debug(`⚡ URGENT registration event: ${data.rfid}`);
+            this.pusher.trigger('registration-urgent', 'rfid-detected', Object.assign(Object.assign({}, data), { rfid: data.rfid, scannerCode: data.scannerCode, timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()), location: ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || ((_b = data.location) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown', locationId: ((_c = data.location) === null || _c === void 0 ? void 0 : _c.locationId) || ((_d = data.location) === null || _d === void 0 ? void 0 : _d.locationId), employeeUserCode: (_e = data.employeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode, _sentAt: startTime, _priority: 'highest', _zeroDelay: true })).then(() => {
                 const latency = Date.now() - startTime;
-                this.logger.debug(`⚡ URGENT registration sent: ${latency}ms for RFID: ${data.rfid}`);
-                if (latency > 200) {
+                this.logger.debug(`⚡ URGENT registration sent: ${latency}ms`);
+                if (latency > 30) {
                     this.logger.warn(`⚠️ Slow URGENT registration: ${latency}ms`);
                 }
             }).catch(err => {
-                this.logger.error(`URGENT registration failed: ${err.message}`, err.stack);
+                this.logger.debug(`URGENT registration failed (non-critical): ${err.message}`);
             });
         }
         catch (ex) {

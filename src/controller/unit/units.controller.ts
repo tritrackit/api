@@ -182,7 +182,7 @@ export class UnitsController {
     }
   }
 
-  // ✅ WEB INTERFACE REGISTRATION (via JWT)
+  // ✅ WEB INTERFACE REGISTRATION (via JWT) - ULTRA-FAST with predictive notifications
   @Post("register")
   @UseGuards(JwtAuthGuard)
   @ApiBody({
@@ -210,10 +210,17 @@ export class UnitsController {
     }
   ) {
     const res: ApiResponseModel<any> = {} as any;
+    const requestStart = Date.now();
+    
     try {
-      res.data = await this.unitsService.registerUnit(
+      // ⚡ Generate transaction ID for tracking
+      const transactionId = `tx_${requestStart}_${Math.random().toString(36).substr(2, 9)}`;
+      const predictiveSentAt = Date.now();
+      
+      // ⚡ Call ultra-fast service
+      res.data = await this.unitsService.registerUnitUltraFast(
         dto.rfid, 
-        dto.scannerCode, // From request body
+        dto.scannerCode,
         {
           chassisNo: dto.chassisNo,
           color: dto.color,
@@ -221,12 +228,53 @@ export class UnitsController {
           modelId: dto.modelId
         }
       );
+      
       res.success = true;
       res.message = `Unit ${SAVING_SUCCESS}`;
+      
+      // ⚡ Add predictive metadata to response (as part of data)
+      if (res.data) {
+        (res.data as any).metadata = {
+          transactionId,
+          requestStart,
+          predictiveSentAt,
+          responseTime: Date.now() - requestStart,
+          expectedChannels: ['registration-urgent', 'all'],
+          expectedEvents: ['rfid-detected', 'reSync'],
+          pusherAction: 'UNIT_REGISTERING_PREDICTIVE',
+          _ultraFastMode: true,
+          _predictiveUI: true
+        };
+      }
+      
       return res;
+      
     } catch (e) {
+      // Send failure notification
+      const errorTransactionId = `err_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Try to send failure notification (non-blocking)
+      try {
+        (this.unitsService as any).sendRegistrationFailed?.(
+          dto.rfid, 
+          errorTransactionId, 
+          e.message
+        );
+      } catch (notifError) {
+        // Ignore notification errors
+      }
+      
       res.success = false;
       res.message = e.message !== undefined ? e.message : e;
+      
+      // ⚡ Add error metadata to response
+      (res as any).metadata = {
+        errorTransactionId,
+        requestStart,
+        responseTime: Date.now() - requestStart,
+        error: e.message
+      };
+      
       return res;
     }
   }

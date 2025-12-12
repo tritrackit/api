@@ -20,7 +20,6 @@ const typeorm_1 = require("@nestjs/typeorm");
 const units_constant_1 = require("../common/constant/units.constant");
 const employee_user_error_constant_1 = require("../common/constant/employee-user-error.constant");
 const utils_1 = require("../common/utils/utils");
-const unit_create_dto_1 = require("../core/dto/unit/unit.create.dto");
 const Units_1 = require("../db/entities/Units");
 const EmployeeUsers_1 = require("../db/entities/EmployeeUsers");
 const typeorm_2 = require("typeorm");
@@ -340,73 +339,149 @@ let UnitsService = UnitsService_1 = class UnitsService {
             return this.cleanUnitResponse(result);
         });
     }
-    async registerUnit(rfid, scannerCode, additionalData = {}) {
-        var _a, _b, _c;
-        const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
-            const scanner = await entityManager.findOne(Scanner_1.Scanner, {
-                where: {
-                    scannerCode,
-                    active: true,
-                    scannerType: "REGISTRATION"
-                },
-                relations: ["location", "status", "assignedEmployeeUser"]
-            });
-            if (!scanner) {
-                throw Error("Registration scanner not found");
-            }
-            const existingUnit = await entityManager.findOne(Units_1.Units, {
-                where: { rfid, active: true }
-            });
-            if (existingUnit) {
-                throw Error("Unit with this RFID already registered");
-            }
-            if (!scanner.assignedEmployeeUser) {
-                throw Error("Registration scanner does not have an assigned employee user");
-            }
-            const createUnitDto = new unit_create_dto_1.CreateUnitDto();
-            createUnitDto.rfid = rfid;
-            createUnitDto.chassisNo = additionalData.chassisNo || `CH-${rfid}`;
-            createUnitDto.color = additionalData.color || "Auto-Registered";
-            createUnitDto.description = additionalData.description || `Auto-registered at ${scanner.location.name}`;
-            createUnitDto.modelId = additionalData.modelId;
-            createUnitDto.locationId = scanner.location.locationId;
-            const unit = await this.createWithScannerStatus(createUnitDto, scanner.assignedEmployeeUser.employeeUserId, scanner.status);
-            return {
-                unit: this.cleanUnitResponse(unit),
-                scanner: scanner
-            };
-        });
-        const unitCacheKey = this.keyUnit(rfid);
-        this.cacheService.del(unitCacheKey);
-        this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
-        if (result.unit && ((_a = result.scanner.assignedEmployeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode)) {
-            const startTime = Date.now();
-            this.pusherService.sendRegistrationEventImmediate({
-                rfid: result.unit.rfid,
-                scannerCode: scannerCode,
-                timestamp: new Date(),
-                location: result.scanner.location,
-                scannerType: result.scanner.scannerType,
-                employeeUser: result.scanner.assignedEmployeeUser
-            }).catch(err => {
-                this.logger.error(`Failed to send immediate registration event: ${err.message}`);
-            });
-            this.pusherService.reSync('units', {
-                rfid: result.unit.rfid,
-                action: 'UNIT_REGISTERED',
-                unitCode: result.unit.unitCode,
-                location: (_b = result.unit.location) === null || _b === void 0 ? void 0 : _b.name,
-                status: (_c = result.unit.status) === null || _c === void 0 ? void 0 : _c.name,
-                timestamp: new Date(),
-                _pusherSentAt: startTime
-            });
-            const latency = Date.now() - startTime;
-            this.logger.debug(`⚡ Registration Pusher events triggered: ${latency}ms for unit: ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
-            if (latency > 500) {
-                this.logger.warn(`⚠️ Slow registration Pusher: ${latency}ms`);
-            }
+    async registerUnitUltraFast(rfid, scannerCode, additionalData = {}) {
+        const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const predictiveSentAt = Date.now();
+        this.logger.debug(`⚡ ULTRA-FAST Registration start: ${rfid} (${transactionId})`);
+        this.sendPredictiveNotification(rfid, scannerCode, transactionId);
+        const [scanner, existingUnit] = await Promise.all([
+            this.getScannerCached(this.unitsRepo.manager, scannerCode),
+            this.getUnitCached(this.unitsRepo.manager, rfid)
+        ]);
+        if (existingUnit) {
+            this.sendRegistrationFailed(rfid, transactionId, "Unit already exists");
+            throw Error("Unit with this RFID already registered");
         }
-        return result.unit;
+        if (!scanner) {
+            this.sendRegistrationFailed(rfid, transactionId, "Scanner not found");
+            throw Error("Registration scanner not found");
+        }
+        if (!scanner.assignedEmployeeUser) {
+            this.sendRegistrationFailed(rfid, transactionId, "Scanner does not have assigned employee user");
+            throw Error("Registration scanner does not have an assigned employee user");
+        }
+        let unit;
+        try {
+            unit = await this.executeMinimalTransaction(rfid, scanner, additionalData);
+        }
+        catch (error) {
+            this.sendRegistrationFailed(rfid, transactionId, error.message);
+            throw error;
+        }
+        this.clearCacheImmediately(rfid, unit.unitCode);
+        this.sendConfirmedNotificationAsync(unit, scanner, scannerCode, transactionId, predictiveSentAt);
+        this.handleAsyncPostRegistration(unit, scanner);
+        const totalTime = Date.now() - predictiveSentAt;
+        this.logger.debug(`⚡ ULTRA-FAST Registration complete: ${totalTime}ms for ${rfid}`);
+        const cleanedUnit = await this.unitsRepo.findOne({
+            where: { unitId: unit.unitId, active: true },
+            relations: ["model", "location", "status", "createdBy", "updatedBy"]
+        });
+        return Object.assign(Object.assign({}, this.cleanUnitResponse(cleanedUnit)), { _predictive: true, _transactionId: transactionId, _predictiveSentAt: predictiveSentAt, _dbCommitTime: Date.now(), _totalLatency: totalTime });
+    }
+    sendPredictiveNotification(rfid, scannerCode, transactionId) {
+        const predictiveData = {
+            rfid,
+            scannerCode,
+            action: 'UNIT_REGISTERING_PREDICTIVE',
+            transactionId,
+            timestamp: new Date(),
+            _sentAt: Date.now(),
+            _predictive: true,
+            _priority: 'highest'
+        };
+        this.pusherService.sendRegistrationUrgent(predictiveData);
+        this.pusherService.reSync('units', predictiveData, true);
+    }
+    async executeMinimalTransaction(rfid, scanner, additionalData) {
+        return await this.unitsRepo.manager.transaction(async (entityManager) => {
+            this.logger.debug(`⚡ Starting MINIMAL transaction for: ${rfid}`);
+            const unit = new Units_1.Units();
+            unit.rfid = rfid;
+            unit.chassisNo = additionalData.chassisNo || `CH-${rfid}`;
+            unit.color = additionalData.color || "Auto-Registered";
+            unit.description = additionalData.description || `Auto-registered at ${scanner.location.name}`;
+            unit.dateCreated = new Date();
+            if (additionalData.modelId) {
+                const model = await entityManager.findOne(Model_1.Model, {
+                    where: { modelId: additionalData.modelId },
+                    select: ['modelId']
+                });
+                if (model)
+                    unit.model = model;
+            }
+            unit.status = scanner.status;
+            unit.location = scanner.location;
+            unit.createdBy = scanner.assignedEmployeeUser;
+            const savedUnit = await entityManager.save(Units_1.Units, unit);
+            savedUnit.unitCode = `U-${(0, utils_1.generateIndentityCode)(savedUnit.unitId)}`;
+            await entityManager.save(Units_1.Units, savedUnit);
+            this.logger.debug(`⚡ MINIMAL transaction complete for: ${rfid}`);
+            return savedUnit;
+        });
+    }
+    clearCacheImmediately(rfid, unitCode) {
+        const unitCacheKey = this.keyUnit(rfid);
+        const unitCodeCacheKey = cache_constant_1.CacheKeys.units.byCode(unitCode);
+        this.cacheService.del(unitCacheKey);
+        this.cacheService.del(unitCodeCacheKey);
+        this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
+        this.logger.debug(`⚡ Cache cleared IMMEDIATELY for: ${rfid}`);
+    }
+    sendConfirmedNotificationAsync(unit, scanner, scannerCode, transactionId, predictiveSentAt) {
+        var _a, _b;
+        const confirmedData = {
+            rfid: unit.rfid,
+            scannerCode,
+            action: 'UNIT_REGISTERED_CONFIRMED',
+            unitCode: unit.unitCode,
+            transactionId,
+            location: (_a = scanner.location) === null || _a === void 0 ? void 0 : _a.name,
+            status: (_b = scanner.status) === null || _b === void 0 ? void 0 : _b.name,
+            timestamp: new Date(),
+            _sentAt: Date.now(),
+            _predictiveLatency: Date.now() - predictiveSentAt,
+            _confirmed: true
+        };
+        Promise.all([
+            this.pusherService.sendRegistrationEventImmediate({
+                rfid: unit.rfid,
+                scannerCode,
+                timestamp: new Date(),
+                location: scanner.location,
+                scannerType: scanner.scannerType,
+                employeeUser: scanner.assignedEmployeeUser
+            }),
+            this.pusherService.reSync('units', confirmedData, true)
+        ]).catch(err => {
+            this.logger.debug(`Async Pusher send failed: ${err.message}`);
+        });
+    }
+    async handleAsyncPostRegistration(unit, scanner) {
+        try {
+            const unitLogs = new UnitLogs_1.UnitLogs();
+            unitLogs.timestamp = new Date();
+            unitLogs.unit = unit;
+            unitLogs.status = scanner.status;
+            unitLogs.location = scanner.location;
+            unitLogs.employeeUser = scanner.assignedEmployeeUser;
+            await this.unitsRepo.manager.save(UnitLogs_1.UnitLogs, unitLogs);
+        }
+        catch (error) {
+            this.logger.warn(`Async post-registration failed: ${error.message}`);
+        }
+    }
+    sendRegistrationFailed(rfid, transactionId, error) {
+        this.pusherService.reSync('units', {
+            rfid,
+            action: 'UNIT_REGISTRATION_FAILED',
+            transactionId,
+            error,
+            timestamp: new Date()
+        }, true);
+    }
+    async registerUnit(rfid, scannerCode, additionalData = {}) {
+        return this.registerUnitUltraFast(rfid, scannerCode, additionalData);
     }
     async updateUnitLocation(rfid, scannerCode) {
         const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
@@ -894,19 +969,14 @@ let UnitsService = UnitsService_1 = class UnitsService {
         return lastLog !== null && lastLog !== void 0 ? lastLog : null;
     }
     async unitLogs(logsDto, scannerCode) {
-        var _a, _b;
-        this.logger.debug('=== DEBUG unitLogs START ===');
-        this.logger.debug(`Scanner Code: ${scannerCode}`);
-        this.logger.debug(`Data received: ${JSON.stringify(logsDto.data)}`);
+        var _a, _b, _c;
+        const processStart = Date.now();
         if (!((_a = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _a === void 0 ? void 0 : _a.length)) {
-            this.logger.warn('No data in logsDto');
             return [];
         }
         const scanner = await this.getScannerCached(this.unitsRepo.manager, scannerCode);
-        this.logger.debug(`Scanner found: ${scanner === null || scanner === void 0 ? void 0 : scanner.name}`);
-        this.logger.debug(`Scanner Type: ${scanner === null || scanner === void 0 ? void 0 : scanner.scannerType}`);
         if (!scanner) {
-            this.logger.warn('Scanner not found!');
+            this.logger.warn(`Scanner not found: ${scannerCode}`);
             return [];
         }
         const immediateNotifications = [];
@@ -921,31 +991,16 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp || Date.now())
                     });
                     alreadyNotifiedRfids.add(rfid);
-                }
-            }
-            if (immediateNotifications.length > 0) {
-                this.logger.debug(`⚡ Sending ${immediateNotifications.length} IMMEDIATE registration notifications (outside transaction)...`);
-                immediateNotifications.forEach((notif) => {
-                    const unitCacheKey = this.keyUnit(notif.rfid);
-                    this.cacheService.del(unitCacheKey);
                     this.pusherService.sendRegistrationUrgent({
-                        rfid: notif.rfid,
-                        scannerCode: scannerCode,
-                        timestamp: notif.timestamp,
+                        rfid,
+                        scannerCode,
+                        timestamp: new Date(),
                         location: scanner.location,
-                        employeeUser: scanner.assignedEmployeeUser
+                        employeeUser: scanner.assignedEmployeeUser,
+                        _immediate: true,
+                        _sentAt: Date.now()
                     });
-                    this.pusherService.sendRegistrationEventImmediate({
-                        rfid: notif.rfid,
-                        scannerCode: scannerCode,
-                        timestamp: notif.timestamp,
-                        location: scanner.location,
-                        scannerType: scanner.scannerType,
-                        employeeUser: scanner.assignedEmployeeUser
-                    }).catch(err => {
-                        this.logger.error(`Failed to send immediate notification for RFID ${notif.rfid}: ${err.message}`);
-                    });
-                });
+                }
             }
         }
         const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
@@ -1139,10 +1194,12 @@ let UnitsService = UnitsService_1 = class UnitsService {
                     });
                 }
             }
-            this.logger.debug('=== DEBUG unitLogs END ===');
+            const totalTime = Date.now() - processStart;
+            this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, ${((_c = result === null || result === void 0 ? void 0 : result.unitLogs) === null || _c === void 0 ? void 0 : _c.length) || 0} in transaction`);
             return result.unitLogs;
         }
-        this.logger.debug('=== DEBUG unitLogs END ===');
+        const totalTime = Date.now() - processStart;
+        this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, 0 in transaction`);
         return Array.isArray(result) ? result : [];
     }
     async getActivityHistory(unitCode, pageSize = 50, pageIndex = 0) {

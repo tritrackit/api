@@ -1,4 +1,4 @@
-import { Module, OnApplicationBootstrap } from "@nestjs/common";
+import { Module, OnApplicationBootstrap, NestModule, MiddlewareConsumer } from "@nestjs/common";
 import { AppService } from "./app.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfigService } from "./db/typeorm/typeorm.service";
@@ -14,6 +14,7 @@ import { UnitsModule } from "./controller/unit/units.module";
 import { StatisticsModule } from "./controller/statistics/statistics.module";
 import { CacheService } from "./services/cache.service";
 import { CacheModule } from "./core/cache/cache.module";
+import { PerformanceMiddleware } from "./core/middleware/performance.middleware";
 
 @Module({
   imports: [
@@ -38,8 +39,15 @@ import { CacheModule } from "./core/cache/cache.module";
   providers: [AppService, CacheService],
   controllers: [],
 })
-export class AppModule implements OnApplicationBootstrap {
+export class AppModule implements NestModule, OnApplicationBootstrap {
   constructor(private readonly cache: CacheService) {}
+  
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(PerformanceMiddleware)
+      .forRoutes('units');
+  }
+  
   onApplicationBootstrap() {
     if (process.env.NODE_ENV !== "production") {
     }
