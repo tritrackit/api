@@ -399,14 +399,14 @@ export class UnitsService {
     
     this.logger.debug(`⚡ ULTRA-FAST Registration start: ${rfid} (${transactionId})`);
     
-    // ⚡ STEP 1: Send PREDICTIVE notification FIRST (0ms delay)
-    this.sendPredictiveNotification(rfid, scannerCode, transactionId);
-    
     // ⚡ STEP 2: Pre-checks outside transaction (parallel)
     const [scanner, existingUnit] = await Promise.all([
       this.getScannerCached(this.unitsRepo.manager, scannerCode),
       this.getUnitCached(this.unitsRepo.manager, rfid)
     ]);
+    
+    // ⚡ STEP 1: Send PREDICTIVE notification FIRST (0ms delay) - after getting scanner
+    this.sendPredictiveNotification(rfid, scannerCode, transactionId, scanner || undefined);
     
     if (existingUnit) {
       this.sendRegistrationFailed(rfid, transactionId, "Unit already exists");
@@ -460,16 +460,24 @@ export class UnitsService {
     };
   }
 
-  private sendPredictiveNotification(rfid: string, scannerCode: string, transactionId: string) {
+  private sendPredictiveNotification(rfid: string, scannerCode: string, transactionId: string, scanner?: Scanner) {
     const predictiveData = {
       rfid,
       scannerCode,
       action: 'UNIT_REGISTERING_PREDICTIVE',
       transactionId,
       timestamp: new Date(),
+      location: scanner?.location?.name || 'Unknown',
+      locationId: scanner?.location?.locationId,
+      status: scanner?.status?.name || 'FOR DELIVERY',
+      statusId: scanner?.status?.statusId,
+      scannerType: scanner?.scannerType || 'REGISTRATION',
+      employeeUserCode: scanner?.assignedEmployeeUser?.employeeUserCode,
       _sentAt: Date.now(),
       _predictive: true,
-      _priority: 'highest'
+      _priority: 'highest',
+      _autoDisplay: true, // Frontend should auto-display CBU form
+      _noToast: false // Show notification for new registration
     };
     
     // Fire and forget - don't wait
@@ -531,13 +539,40 @@ export class UnitsService {
     this.logger.debug(`⚡ Cache cleared IMMEDIATELY for: ${rfid}`);
   }
 
-  private sendConfirmedNotificationAsync(
+  private async sendConfirmedNotificationAsync(
     unit: Units, 
     scanner: Scanner, 
     scannerCode: string,
     transactionId: string,
     predictiveSentAt: number
   ) {
+    // Get full unit data with all relations for frontend display
+    const fullUnit = await this.unitsRepo.findOne({
+      where: { unitId: unit.unitId, active: true },
+      relations: ["model", "location", "status", "createdBy"]
+    });
+
+    const unitData = fullUnit ? {
+      unitId: fullUnit.unitId,
+      unitCode: fullUnit.unitCode,
+      rfid: fullUnit.rfid,
+      chassisNo: fullUnit.chassisNo,
+      color: fullUnit.color,
+      description: fullUnit.description,
+      model: fullUnit.model ? {
+        modelId: fullUnit.model.modelId,
+        modelName: (fullUnit.model as any).modelName || (fullUnit.model as any).name
+      } : null,
+      location: fullUnit.location ? {
+        locationId: fullUnit.location.locationId,
+        name: fullUnit.location.name
+      } : null,
+      status: fullUnit.status ? {
+        statusId: fullUnit.status.statusId,
+        name: fullUnit.status.name
+      } : null
+    } : null;
+
     const confirmedData = {
       rfid: unit.rfid,
       scannerCode,
@@ -545,11 +580,16 @@ export class UnitsService {
       unitCode: unit.unitCode,
       transactionId,
       location: scanner.location?.name,
+      locationId: scanner.location?.locationId,
       status: scanner.status?.name,
+      statusId: scanner.status?.statusId,
       timestamp: new Date(),
       _sentAt: Date.now(),
       _predictiveLatency: Date.now() - predictiveSentAt,
-      _confirmed: true
+      _confirmed: true,
+      _autoDisplay: true, // Frontend should auto-display CBU form with details
+      _noToast: false, // Show notification for new registration
+      unit: unitData // Include full unit data for immediate display
     };
     
     // ⚡ Send in parallel, don't wait
@@ -698,16 +738,48 @@ export class UnitsService {
 
     this.logger.debug(`Sending Pusher event for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
 
+    // Get full unit data for frontend auto-refresh
+    const fullUnit = await this.unitsRepo.findOne({
+      where: { unitId: result.unit.unitId, active: true },
+      relations: ["model", "location", "status"]
+    });
+
+    const unitData = fullUnit ? {
+      unitId: fullUnit.unitId,
+      unitCode: fullUnit.unitCode,
+      rfid: fullUnit.rfid,
+      chassisNo: fullUnit.chassisNo,
+      color: fullUnit.color,
+      description: fullUnit.description,
+      model: fullUnit.model ? {
+        modelId: fullUnit.model.modelId,
+        modelName: (fullUnit.model as any).modelName || (fullUnit.model as any).name
+      } : null,
+      location: fullUnit.location ? {
+        locationId: fullUnit.location.locationId,
+        name: fullUnit.location.name
+      } : null,
+      status: fullUnit.status ? {
+        statusId: fullUnit.status.statusId,
+        name: fullUnit.status.name
+      } : null
+    } : null;
+
     this.pusherService.reSync('units', {
       rfid: result.unit.rfid,
       action: result.action,
       location: result.newLocation.name,
+      locationId: result.newLocation.locationId,
       status: result.newStatus.name,
+      statusId: result.newStatus.statusId,
       previousLocation: result.previousLocation.name,
       previousStatus: result.previousStatus.name,
       unitCode: result.unit.unitCode,
-      timestamp: new Date()
-    });
+      timestamp: new Date(),
+      _autoRefresh: true, // Frontend should auto-refresh unit tracker table
+      _noToast: true, // Don't show toast for location updates (already registered)
+      unit: unitData // Include full unit data for table update
+    }, true); // Urgent flag for immediate delivery
 
     const unitCacheKey = this.keyUnit(result.unit.rfid);
     const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
@@ -1382,11 +1454,52 @@ export class UnitsService {
     if (result && typeof result === 'object' && 'rfidsToNotify' in result) {
       if (result.rfidsToNotify && result.rfidsToNotify.length > 0) {
         this.logger.debug(`Triggering Pusher events for ${result.rfidsToNotify.length} units (non-blocking)...`);
-        result.rfidsToNotify.forEach((rfid: string) => {
+        
+        // Get full unit data for each RFID to include in event
+        const unitDataPromises = result.rfidsToNotify.map(async (rfid: string) => {
+          const unit = await this.unitsRepo.findOne({
+            where: { rfid, active: true },
+            relations: ["model", "location", "status"]
+          });
+          
+          if (unit) {
+            return {
+              rfid,
+              unit: {
+                unitId: unit.unitId,
+                unitCode: unit.unitCode,
+                rfid: unit.rfid,
+                chassisNo: unit.chassisNo,
+                color: unit.color,
+                description: unit.description,
+                model: unit.model ? {
+                  modelId: unit.model.modelId,
+                  modelName: (unit.model as any).modelName || (unit.model as any).name
+                } : null,
+                location: unit.location ? {
+                  locationId: unit.location.locationId,
+                  name: unit.location.name
+                } : null,
+                status: unit.status ? {
+                  statusId: unit.status.statusId,
+                  name: unit.status.name
+                } : null
+              }
+            };
+          }
+          return { rfid, unit: null };
+        });
+        
+        const unitsData = await Promise.all(unitDataPromises);
+        
+        unitsData.forEach(({ rfid, unit: unitData }) => {
           this.pusherService.reSync('units', {
             rfid: rfid,
             action: 'LOCATION_UPDATED',
-            timestamp: new Date()
+            timestamp: new Date(),
+            _autoRefresh: true, // Frontend should auto-refresh unit tracker table
+            _noToast: true, // Don't show toast for location updates (already registered)
+            unit: unitData // Include full unit data for table update
           }, true); // ⚡ Urgent flag for RFID events
         });
       }
@@ -1413,8 +1526,12 @@ export class UnitsService {
               scannerCode: e.scannerCode,
               location: e.location?.name,
               locationId: e.location?.locationId,
+              status: scanner?.status?.name || 'FOR DELIVERY',
+              statusId: scanner?.status?.statusId,
               employeeUserCode: e.employeeUser?.employeeUserCode,
-              timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now())
+              timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now()),
+              _autoDisplay: true, // Frontend should auto-display CBU form
+              _noToast: false // Show notification for new RFID detection
             };
 
             Promise.all([

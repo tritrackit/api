@@ -343,11 +343,11 @@ let UnitsService = UnitsService_1 = class UnitsService {
         const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const predictiveSentAt = Date.now();
         this.logger.debug(`⚡ ULTRA-FAST Registration start: ${rfid} (${transactionId})`);
-        this.sendPredictiveNotification(rfid, scannerCode, transactionId);
         const [scanner, existingUnit] = await Promise.all([
             this.getScannerCached(this.unitsRepo.manager, scannerCode),
             this.getUnitCached(this.unitsRepo.manager, rfid)
         ]);
+        this.sendPredictiveNotification(rfid, scannerCode, transactionId, scanner || undefined);
         if (existingUnit) {
             this.sendRegistrationFailed(rfid, transactionId, "Unit already exists");
             throw Error("Unit with this RFID already registered");
@@ -379,16 +379,25 @@ let UnitsService = UnitsService_1 = class UnitsService {
         });
         return Object.assign(Object.assign({}, this.cleanUnitResponse(cleanedUnit)), { _predictive: true, _transactionId: transactionId, _predictiveSentAt: predictiveSentAt, _dbCommitTime: Date.now(), _totalLatency: totalTime });
     }
-    sendPredictiveNotification(rfid, scannerCode, transactionId) {
+    sendPredictiveNotification(rfid, scannerCode, transactionId, scanner) {
+        var _a, _b, _c, _d, _e;
         const predictiveData = {
             rfid,
             scannerCode,
             action: 'UNIT_REGISTERING_PREDICTIVE',
             transactionId,
             timestamp: new Date(),
+            location: ((_a = scanner === null || scanner === void 0 ? void 0 : scanner.location) === null || _a === void 0 ? void 0 : _a.name) || 'Unknown',
+            locationId: (_b = scanner === null || scanner === void 0 ? void 0 : scanner.location) === null || _b === void 0 ? void 0 : _b.locationId,
+            status: ((_c = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _c === void 0 ? void 0 : _c.name) || 'FOR DELIVERY',
+            statusId: (_d = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _d === void 0 ? void 0 : _d.statusId,
+            scannerType: (scanner === null || scanner === void 0 ? void 0 : scanner.scannerType) || 'REGISTRATION',
+            employeeUserCode: (_e = scanner === null || scanner === void 0 ? void 0 : scanner.assignedEmployeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode,
             _sentAt: Date.now(),
             _predictive: true,
-            _priority: 'highest'
+            _priority: 'highest',
+            _autoDisplay: true,
+            _noToast: false
         };
         this.pusherService.sendRegistrationUrgent(predictiveData);
         this.pusherService.reSync('units', predictiveData, true);
@@ -428,8 +437,32 @@ let UnitsService = UnitsService_1 = class UnitsService {
         this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
         this.logger.debug(`⚡ Cache cleared IMMEDIATELY for: ${rfid}`);
     }
-    sendConfirmedNotificationAsync(unit, scanner, scannerCode, transactionId, predictiveSentAt) {
-        var _a, _b;
+    async sendConfirmedNotificationAsync(unit, scanner, scannerCode, transactionId, predictiveSentAt) {
+        var _a, _b, _c, _d;
+        const fullUnit = await this.unitsRepo.findOne({
+            where: { unitId: unit.unitId, active: true },
+            relations: ["model", "location", "status", "createdBy"]
+        });
+        const unitData = fullUnit ? {
+            unitId: fullUnit.unitId,
+            unitCode: fullUnit.unitCode,
+            rfid: fullUnit.rfid,
+            chassisNo: fullUnit.chassisNo,
+            color: fullUnit.color,
+            description: fullUnit.description,
+            model: fullUnit.model ? {
+                modelId: fullUnit.model.modelId,
+                modelName: fullUnit.model.modelName || fullUnit.model.name
+            } : null,
+            location: fullUnit.location ? {
+                locationId: fullUnit.location.locationId,
+                name: fullUnit.location.name
+            } : null,
+            status: fullUnit.status ? {
+                statusId: fullUnit.status.statusId,
+                name: fullUnit.status.name
+            } : null
+        } : null;
         const confirmedData = {
             rfid: unit.rfid,
             scannerCode,
@@ -437,11 +470,16 @@ let UnitsService = UnitsService_1 = class UnitsService {
             unitCode: unit.unitCode,
             transactionId,
             location: (_a = scanner.location) === null || _a === void 0 ? void 0 : _a.name,
-            status: (_b = scanner.status) === null || _b === void 0 ? void 0 : _b.name,
+            locationId: (_b = scanner.location) === null || _b === void 0 ? void 0 : _b.locationId,
+            status: (_c = scanner.status) === null || _c === void 0 ? void 0 : _c.name,
+            statusId: (_d = scanner.status) === null || _d === void 0 ? void 0 : _d.statusId,
             timestamp: new Date(),
             _sentAt: Date.now(),
             _predictiveLatency: Date.now() - predictiveSentAt,
-            _confirmed: true
+            _confirmed: true,
+            _autoDisplay: true,
+            _noToast: false,
+            unit: unitData
         };
         Promise.all([
             this.pusherService.sendRegistrationEventImmediate({
@@ -558,16 +596,45 @@ let UnitsService = UnitsService_1 = class UnitsService {
             };
         });
         this.logger.debug(`Sending Pusher event for unit ${result.unit.unitCode} (RFID: ${result.unit.rfid})`);
+        const fullUnit = await this.unitsRepo.findOne({
+            where: { unitId: result.unit.unitId, active: true },
+            relations: ["model", "location", "status"]
+        });
+        const unitData = fullUnit ? {
+            unitId: fullUnit.unitId,
+            unitCode: fullUnit.unitCode,
+            rfid: fullUnit.rfid,
+            chassisNo: fullUnit.chassisNo,
+            color: fullUnit.color,
+            description: fullUnit.description,
+            model: fullUnit.model ? {
+                modelId: fullUnit.model.modelId,
+                modelName: fullUnit.model.modelName || fullUnit.model.name
+            } : null,
+            location: fullUnit.location ? {
+                locationId: fullUnit.location.locationId,
+                name: fullUnit.location.name
+            } : null,
+            status: fullUnit.status ? {
+                statusId: fullUnit.status.statusId,
+                name: fullUnit.status.name
+            } : null
+        } : null;
         this.pusherService.reSync('units', {
             rfid: result.unit.rfid,
             action: result.action,
             location: result.newLocation.name,
+            locationId: result.newLocation.locationId,
             status: result.newStatus.name,
+            statusId: result.newStatus.statusId,
             previousLocation: result.previousLocation.name,
             previousStatus: result.previousStatus.name,
             unitCode: result.unit.unitCode,
-            timestamp: new Date()
-        });
+            timestamp: new Date(),
+            _autoRefresh: true,
+            _noToast: true,
+            unit: unitData
+        }, true);
         const unitCacheKey = this.keyUnit(result.unit.rfid);
         const lastLogCacheKey = this.keyLastLog(result.unit.rfid);
         const unitCodeCacheKey = cache_constant_1.CacheKeys.units.byCode(result.unit.unitCode);
@@ -1140,11 +1207,47 @@ let UnitsService = UnitsService_1 = class UnitsService {
         if (result && typeof result === 'object' && 'rfidsToNotify' in result) {
             if (result.rfidsToNotify && result.rfidsToNotify.length > 0) {
                 this.logger.debug(`Triggering Pusher events for ${result.rfidsToNotify.length} units (non-blocking)...`);
-                result.rfidsToNotify.forEach((rfid) => {
+                const unitDataPromises = result.rfidsToNotify.map(async (rfid) => {
+                    const unit = await this.unitsRepo.findOne({
+                        where: { rfid, active: true },
+                        relations: ["model", "location", "status"]
+                    });
+                    if (unit) {
+                        return {
+                            rfid,
+                            unit: {
+                                unitId: unit.unitId,
+                                unitCode: unit.unitCode,
+                                rfid: unit.rfid,
+                                chassisNo: unit.chassisNo,
+                                color: unit.color,
+                                description: unit.description,
+                                model: unit.model ? {
+                                    modelId: unit.model.modelId,
+                                    modelName: unit.model.modelName || unit.model.name
+                                } : null,
+                                location: unit.location ? {
+                                    locationId: unit.location.locationId,
+                                    name: unit.location.name
+                                } : null,
+                                status: unit.status ? {
+                                    statusId: unit.status.statusId,
+                                    name: unit.status.name
+                                } : null
+                            }
+                        };
+                    }
+                    return { rfid, unit: null };
+                });
+                const unitsData = await Promise.all(unitDataPromises);
+                unitsData.forEach(({ rfid, unit: unitData }) => {
                     this.pusherService.reSync('units', {
                         rfid: rfid,
                         action: 'LOCATION_UPDATED',
-                        timestamp: new Date()
+                        timestamp: new Date(),
+                        _autoRefresh: true,
+                        _noToast: true,
+                        unit: unitData
                     }, true);
                 });
             }
@@ -1160,7 +1263,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
                     return hasEmployeeCode;
                 })
                     .forEach((e) => {
-                    var _a, _b, _c, _d, _e;
+                    var _a, _b, _c, _d, _e, _f, _g;
                     this.logger.debug(`⚡ Sending registration event for RFID: ${e.rfid}, Employee: ${(_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode}`);
                     const unitCacheKey = this.keyUnit(e.rfid);
                     this.cacheService.del(unitCacheKey);
@@ -1170,11 +1273,15 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         scannerCode: e.scannerCode,
                         location: (_b = e.location) === null || _b === void 0 ? void 0 : _b.name,
                         locationId: (_c = e.location) === null || _c === void 0 ? void 0 : _c.locationId,
-                        employeeUserCode: (_d = e.employeeUser) === null || _d === void 0 ? void 0 : _d.employeeUserCode,
-                        timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now())
+                        status: ((_d = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _d === void 0 ? void 0 : _d.name) || 'FOR DELIVERY',
+                        statusId: (_e = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _e === void 0 ? void 0 : _e.statusId,
+                        employeeUserCode: (_f = e.employeeUser) === null || _f === void 0 ? void 0 : _f.employeeUserCode,
+                        timestamp: e.timestamp instanceof Date ? e.timestamp : new Date(e.timestamp || Date.now()),
+                        _autoDisplay: true,
+                        _noToast: false
                     };
                     Promise.all([
-                        Promise.resolve(this.pusherService.sendTriggerRegister((_e = e.employeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode, e)),
+                        Promise.resolve(this.pusherService.sendTriggerRegister((_g = e.employeeUser) === null || _g === void 0 ? void 0 : _g.employeeUserCode, e)),
                         Promise.resolve(this.pusherService.reSync('units', reSyncData, true))
                     ]).catch(err => {
                         this.logger.error(`Failed to send parallel registration events: ${err.message}`);
