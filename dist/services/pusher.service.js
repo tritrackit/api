@@ -211,23 +211,27 @@ let PusherService = PusherService_1 = class PusherService {
         }
     }
     sendRegistrationUrgent(data) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b;
         const startTime = Date.now();
-        try {
-            this.logger.debug(`⚡ URGENT registration event: ${data.rfid}`);
-            this.pusher.trigger('registration-urgent', 'rfid-detected', Object.assign(Object.assign({}, data), { rfid: data.rfid, scannerCode: data.scannerCode, timestamp: data.timestamp instanceof Date ? data.timestamp : new Date(data.timestamp || Date.now()), location: ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || ((_b = data.location) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown', locationId: ((_c = data.location) === null || _c === void 0 ? void 0 : _c.locationId) || ((_d = data.location) === null || _d === void 0 ? void 0 : _d.locationId), employeeUserCode: (_e = data.employeeUser) === null || _e === void 0 ? void 0 : _e.employeeUserCode, _sentAt: startTime, _priority: 'highest', _zeroDelay: true })).then(() => {
-                const latency = Date.now() - startTime;
-                this.logger.debug(`⚡ URGENT registration sent: ${latency}ms`);
-                if (latency > 30) {
-                    this.logger.warn(`⚠️ Slow URGENT registration: ${latency}ms`);
-                }
-            }).catch(err => {
-                this.logger.debug(`URGENT registration failed (non-critical): ${err.message}`);
-            });
-        }
-        catch (ex) {
-            this.logger.error(`sendRegistrationUrgent failed: ${ex.message}`, ex.stack);
-        }
+        const locationName = ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || (typeof data.location === 'string' ? data.location : 'Unknown');
+        const locationId = ((_b = data.location) === null || _b === void 0 ? void 0 : _b.locationId) || data.locationId;
+        const emergencyPayload = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ rfid: data.rfid, scannerCode: data.scannerCode, location: locationName, locationId: locationId, _sentAt: startTime, _instant: true }, (data.action && { action: data.action })), (data.transactionId && { transactionId: data.transactionId })), (data.status && { status: data.status })), (data.statusId && { statusId: data.statusId })), (data.employeeUserCode && { employeeUserCode: data.employeeUserCode })), (data.scannerType && { scannerType: data.scannerType }));
+        return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
+            .then(() => {
+            const latency = Date.now() - startTime;
+            if (latency > 30) {
+                this.logger.warn(`⚠️ Emergency RFID latency: ${latency}ms for ${data.rfid}`);
+            }
+            else {
+                this.logger.debug(`⚡ Emergency RFID sent: ${latency}ms`);
+            }
+            return latency;
+        })
+            .catch((err) => {
+            const latency = Date.now() - startTime;
+            this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms)`);
+            return latency;
+        });
     }
     async sendTriggerRegisterAwait(employeeUserCode, data) {
         try {

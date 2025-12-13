@@ -340,8 +340,7 @@ export class UnitsService {
         if (!model) throw Error(MODEL_ERROR_NOT_FOUND);
         unit.model = model;
       }
-      // If no modelId provided, unit.model will be null (allowed for auto-registration)
-
+    
       unit.status = status;
 
       const location = await entityManager.findOne(Locations, {
@@ -350,7 +349,6 @@ export class UnitsService {
       if (!location) throw Error(LOCATIONS_ERROR_NOT_FOUND);
       unit.location = location;
 
-      // Set created by
       const createdBy = await entityManager.findOne(EmployeeUsers, {
         where: { employeeUserId: createdByUserId, active: true }
       });
@@ -379,11 +377,6 @@ export class UnitsService {
       return this.cleanUnitResponse(result);
     });
   }
-
-  /**
-   * ⚡ ULTRA-FAST Registration with predictive notifications
-   * Sends notification BEFORE database commit for <50ms latency
-   */
   async registerUnitUltraFast(
     rfid: string, 
     scannerCode: string, 
@@ -399,13 +392,11 @@ export class UnitsService {
     
     this.logger.debug(`⚡ ULTRA-FAST Registration start: ${rfid} (${transactionId})`);
     
-    // ⚡ STEP 2: Pre-checks outside transaction (parallel)
     const [scanner, existingUnit] = await Promise.all([
       this.getScannerCached(this.unitsRepo.manager, scannerCode),
       this.getUnitCached(this.unitsRepo.manager, rfid)
     ]);
     
-    // ⚡ STEP 1: Send PREDICTIVE notification FIRST (0ms delay) - after getting scanner
     this.sendPredictiveNotification(rfid, scannerCode, transactionId, scanner || undefined);
     
     if (existingUnit) {
@@ -423,7 +414,7 @@ export class UnitsService {
       throw Error("Registration scanner does not have an assigned employee user");
     }
     
-    // ⚡ STEP 3: Execute MINIMAL transaction (only critical DB ops)
+   
     let unit: Units;
     try {
       unit = await this.executeMinimalTransaction(rfid, scanner, additionalData);
@@ -432,19 +423,14 @@ export class UnitsService {
       throw error;
     }
     
-    // ⚡ STEP 4: Clear cache IMMEDIATELY (BEFORE sending confirmed notification)
     this.clearCacheImmediately(rfid, unit.unitCode);
-    
-    // ⚡ STEP 5: Send CONFIRMED notification (non-blocking/async)
     this.sendConfirmedNotificationAsync(unit, scanner, scannerCode, transactionId, predictiveSentAt);
     
-    // ⚡ STEP 6: Handle async operations (don't block response)
     this.handleAsyncPostRegistration(unit, scanner);
     
     const totalTime = Date.now() - predictiveSentAt;
     this.logger.debug(`⚡ ULTRA-FAST Registration complete: ${totalTime}ms for ${rfid}`);
     
-    // ⚡ Return predictive metadata for frontend
     const cleanedUnit = await this.unitsRepo.findOne({
       where: { unitId: unit.unitId, active: true },
       relations: ["model", "location", "status", "createdBy", "updatedBy"]
