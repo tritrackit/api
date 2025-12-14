@@ -15,6 +15,7 @@ import { StatisticsModule } from "./controller/statistics/statistics.module";
 import { CacheService } from "./services/cache.service";
 import { CacheModule } from "./core/cache/cache.module";
 import { PerformanceMiddleware } from "./core/middleware/performance.middleware";
+import { RfidGateway } from "./gateways/rfid.gateway";
 
 @Module({
   imports: [
@@ -36,7 +37,7 @@ import { PerformanceMiddleware } from "./core/middleware/performance.middleware"
     StatisticsModule,
     CacheModule
   ],
-  providers: [AppService, CacheService],
+  providers: [AppService, CacheService, RfidGateway],
   controllers: [],
 })
 export class AppModule implements NestModule, OnApplicationBootstrap {

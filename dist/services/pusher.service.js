@@ -8,16 +8,21 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var PusherService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PusherService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const rfid_gateway_1 = require("../gateways/rfid.gateway");
 const Pusher = require("pusher");
 let PusherService = PusherService_1 = class PusherService {
-    constructor(config) {
+    constructor(config, rfidGateway) {
         var _a, _b;
         this.config = config;
+        this.rfidGateway = rfidGateway;
         this.logger = new common_1.Logger(PusherService_1.name);
         this.batchQueue = new Map();
         this.batchTimers = new Map();
@@ -202,20 +207,37 @@ let PusherService = PusherService_1 = class PusherService {
         const locationName = ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || (typeof data.location === 'string' ? data.location : 'Unknown');
         const locationId = ((_b = data.location) === null || _b === void 0 ? void 0 : _b.locationId) || data.locationId;
         const emergencyPayload = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ rfid: data.rfid, scannerCode: data.scannerCode, location: locationName, locationId: locationId, _sentAt: startTime, _instant: true }, (data.action && { action: data.action })), (data.transactionId && { transactionId: data.transactionId })), (data.status && { status: data.status })), (data.statusId && { statusId: data.statusId })), (data.employeeUserCode && { employeeUserCode: data.employeeUserCode })), (data.scannerType && { scannerType: data.scannerType }));
+        if (this.rfidGateway) {
+            try {
+                this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
+                const socketLatency = Date.now() - startTime;
+                this.logger.debug(`⚡ Socket.io sent: ${socketLatency}ms for ${data.rfid}`);
+                return Promise.resolve(socketLatency);
+            }
+            catch (err) {
+                this.logger.warn(`Socket.io failed, falling back to Pusher: ${err.message}`);
+            }
+        }
+        else {
+            this.logger.debug(`⚠️ RfidGateway not available, using Pusher fallback for ${data.rfid}`);
+        }
         return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
             .then(() => {
             const latency = Date.now() - startTime;
+            const environment = this.config.get('NODE_ENV') || 'unknown';
+            const cluster = this.config.get('PUSHER_CLUSTER') || 'unknown';
             if (latency > 30) {
-                this.logger.warn(`⚠️ Emergency RFID latency: ${latency}ms for ${data.rfid}`);
+                this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${data.rfid} (env: ${environment}, cluster: ${cluster})`);
             }
             else {
-                this.logger.debug(`⚡ Emergency RFID sent: ${latency}ms`);
+                this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms`);
             }
             return latency;
         })
             .catch((err) => {
             const latency = Date.now() - startTime;
-            this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms)`);
+            const environment = this.config.get('NODE_ENV') || 'unknown';
+            this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms, env: ${environment})`);
             return latency;
         });
     }
@@ -231,7 +253,10 @@ let PusherService = PusherService_1 = class PusherService {
 };
 PusherService = PusherService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+    __param(1, (0, common_1.Optional)()),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => rfid_gateway_1.RfidGateway))),
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        rfid_gateway_1.RfidGateway])
 ], PusherService);
 exports.PusherService = PusherService;
 //# sourceMappingURL=pusher.service.js.map

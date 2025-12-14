@@ -1,14 +1,16 @@
 import { ConfigService } from "@nestjs/config";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Locations } from "src/db/entities/Locations";
+import { RfidGateway } from "../gateways/rfid.gateway";
 export declare class PusherService {
     private readonly config;
+    private rfidGateway?;
     private readonly logger;
     pusher: any;
     private batchQueue;
     private batchTimers;
     private readonly BATCH_DELAY_MS;
-    constructor(config: ConfigService);
+    constructor(config: ConfigService, rfidGateway?: RfidGateway);
     trigger(channel: string, event: string, data: any): Promise<void>;
     triggerAsync(channel: string, event: string, data: any): void;
     reSync(type: string, data: any, urgent?: boolean): void;

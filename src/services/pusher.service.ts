@@ -1,7 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, Optional, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Locations } from "src/db/entities/Locations";
+import { RfidGateway } from "../gateways/rfid.gateway";
 
 const Pusher = require("pusher");
 
@@ -19,7 +20,10 @@ export class PusherService {
   private batchQueue: Map<string, Map<string, BatchedEvent>> = new Map();
   private batchTimers: Map<string, NodeJS.Timeout> = new Map();
   private readonly BATCH_DELAY_MS = 10;
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() @Inject(forwardRef(() => RfidGateway)) private rfidGateway?: RfidGateway
+  ) {
     const appId = this.config.get<string>("PUSHER_APPID");
     const key = this.config.get<string>("PUSHER_KEY");
     const secret = this.config.get<string>("PUSHER_SECRET");
@@ -276,21 +280,40 @@ export class PusherService {
       ...(data.scannerType && { scannerType: data.scannerType })
     };
     
+    // ⚡ Try Socket.io first (ultra-fast, <10ms)
+    if (this.rfidGateway) {
+      try {
+        this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
+        const socketLatency = Date.now() - startTime;
+        this.logger.debug(`⚡ Socket.io sent: ${socketLatency}ms for ${data.rfid}`);
+        return Promise.resolve(socketLatency);
+      } catch (err) {
+        this.logger.warn(`Socket.io failed, falling back to Pusher: ${err.message}`);
+        // Continue to Pusher fallback
+      }
+    } else {
+      this.logger.debug(`⚠️ RfidGateway not available, using Pusher fallback for ${data.rfid}`);
+    }
+    
+    // 🔄 Fallback to Pusher (if Socket.io fails or not available)
     return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
       .then(() => {
         const latency = Date.now() - startTime;
+        const environment = this.config.get<string>('NODE_ENV') || 'unknown';
+        const cluster = this.config.get<string>('PUSHER_CLUSTER') || 'unknown';
         
         if (latency > 30) {
-          this.logger.warn(`⚠️ Emergency RFID latency: ${latency}ms for ${data.rfid}`);
+          this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${data.rfid} (env: ${environment}, cluster: ${cluster})`);
         } else {
-          this.logger.debug(`⚡ Emergency RFID sent: ${latency}ms`);
+          this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms`);
         }
         
         return latency;
       })
       .catch((err) => {
         const latency = Date.now() - startTime;
-        this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms)`);
+        const environment = this.config.get<string>('NODE_ENV') || 'unknown';
+        this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms, env: ${environment})`);
         return latency;
       });
   }

@@ -8,11 +8,12 @@ import { PusherService } from "src/services/pusher.service";
 import { ApiKeyScannerGuard } from "src/core/auth/api-key-scanner.guard";
 import { ScannerService } from "src/services/scanner.service";
 import { Scanner } from "src/db/entities/Scanner";
+import { RfidGateway } from "src/gateways/rfid.gateway";
 
 @Module({
   imports: [FirebaseProviderModule, TypeOrmModule.forFeature([Units, Scanner])],
   controllers: [UnitsController],
-  providers: [UnitsService, PusherService, ScannerService, ApiKeyScannerGuard],
+  providers: [UnitsService, PusherService, ScannerService, ApiKeyScannerGuard, RfidGateway],
   exports: [UnitsService, PusherService],
 })
 export class UnitsModule {}

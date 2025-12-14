@@ -26,6 +26,7 @@ const statistics_module_1 = require("./controller/statistics/statistics.module")
 const cache_service_1 = require("./services/cache.service");
 const cache_module_1 = require("./core/cache/cache.module");
 const performance_middleware_1 = require("./core/middleware/performance.middleware");
+const rfid_gateway_1 = require("./gateways/rfid.gateway");
 let AppModule = class AppModule {
     constructor(cache) {
         this.cache = cache;
@@ -61,7 +62,7 @@ AppModule = __decorate([
             statistics_module_1.StatisticsModule,
             cache_module_1.CacheModule
         ],
-        providers: [app_service_1.AppService, cache_service_1.CacheService],
+        providers: [app_service_1.AppService, cache_service_1.CacheService, rfid_gateway_1.RfidGateway],
         controllers: [],
     }),
     __metadata("design:paramtypes", [cache_service_1.CacheService])
