@@ -466,9 +466,8 @@ export class UnitsService {
       _noToast: false // Show notification for new registration
     };
     
-    // Fire and forget - don't wait
+    // ⚡ Use ONLY emergency channel for RFID events (no duplicate channels)
     this.pusherService.sendRegistrationUrgent(predictiveData);
-    this.pusherService.reSync('units', predictiveData, true);
   }
 
   private async executeMinimalTransaction(
@@ -578,18 +577,8 @@ export class UnitsService {
       unit: unitData // Include full unit data for immediate display
     };
     
-    // ⚡ Send in parallel, don't wait
-    Promise.all([
-      this.pusherService.sendRegistrationEventImmediate({
-        rfid: unit.rfid,
-        scannerCode,
-        timestamp: new Date(),
-        location: scanner.location,
-        scannerType: scanner.scannerType,
-        employeeUser: scanner.assignedEmployeeUser
-      }),
-      this.pusherService.reSync('units', confirmedData, true)
-    ]).catch(err => {
+    // ⚡ Use ONLY emergency channel for RFID events (no duplicate channels)
+    this.pusherService.sendRegistrationUrgent(confirmedData).catch(err => {
       this.logger.debug(`Async Pusher send failed: ${err.message}`);
     });
   }
@@ -753,6 +742,7 @@ export class UnitsService {
 
     this.pusherService.reSync('units', {
       rfid: result.unit.rfid,
+      scannerCode: scannerCode, // ⚡ Include scannerCode for emergency channel
       action: result.action,
       location: result.newLocation.name,
       locationId: result.newLocation.locationId,
@@ -1506,12 +1496,13 @@ export class UnitsService {
             const unitCacheKey = this.keyUnit(e.rfid);
             this.cacheService.del(unitCacheKey);
             
-            const reSyncData = {
+            // ⚡ Use ONLY emergency channel for RFID registration events (no duplicates)
+            const rfidData = {
               rfid: e.rfid,
-              action: 'RFID_DETECTED',
               scannerCode: e.scannerCode,
               location: e.location?.name,
               locationId: e.location?.locationId,
+              action: 'RFID_DETECTED',
               status: scanner?.status?.name || 'FOR DELIVERY',
               statusId: scanner?.status?.statusId,
               employeeUserCode: e.employeeUser?.employeeUserCode,
@@ -1520,11 +1511,9 @@ export class UnitsService {
               _noToast: false // Show notification for new RFID detection
             };
 
-            Promise.all([
-              Promise.resolve(this.pusherService.sendTriggerRegister(e.employeeUser?.employeeUserCode!, e)),
-              Promise.resolve(this.pusherService.reSync('units', reSyncData, true)) // ⚡ Urgent flag for RFID events
-            ]).catch(err => {
-              this.logger.error(`Failed to send parallel registration events: ${err.message}`);
+            // ⚡ Single channel for RFID events
+            this.pusherService.sendRegistrationUrgent(rfidData).catch(err => {
+              this.logger.error(`Failed to send RFID registration event: ${err.message}`);
             });
           });
       }

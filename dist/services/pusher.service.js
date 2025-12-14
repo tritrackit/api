@@ -75,25 +75,11 @@ let PusherService = PusherService_1 = class PusherService {
         });
     }
     reSync(type, data, urgent = false) {
-        var _a, _b;
+        var _a, _b, _c, _d;
         try {
             if (urgent || (data === null || data === void 0 ? void 0 : data.rfid) || ((_a = data === null || data === void 0 ? void 0 : data.action) === null || _a === void 0 ? void 0 : _a.includes('RFID')) || ((_b = data === null || data === void 0 ? void 0 : data.action) === null || _b === void 0 ? void 0 : _b.includes('REGISTER')) || (data === null || data === void 0 ? void 0 : data.action) === 'RFID_DETECTED') {
-                const startTime = Date.now();
-                const channel = "all";
-                const event = "reSync";
-                this.logger.debug(`⚡ URGENT Pusher: ${(data === null || data === void 0 ? void 0 : data.action) || 'RFID event'} (0ms delay)`);
-                this.pusher.trigger(channel, event, {
-                    type,
-                    data: Object.assign(Object.assign({}, data), { _pusherSentAt: startTime, _urgent: true, _zeroDelay: true })
-                }).then(() => {
-                    const latency = Date.now() - startTime;
-                    this.logger.debug(`⚡ URGENT Pusher sent: ${latency}ms`);
-                    if (latency > 50) {
-                        this.logger.warn(`⚠️ High Pusher latency: ${latency}ms for RFID event`);
-                    }
-                }).catch(err => {
-                    this.logger.debug(`Pusher trigger failed (non-critical): ${err.message}`);
-                });
+                this.logger.debug(`⚡ Routing RFID event through emergency channel: ${(data === null || data === void 0 ? void 0 : data.action) || 'RFID event'}`);
+                this.sendRegistrationUrgent(Object.assign({ rfid: data.rfid, scannerCode: data.scannerCode, location: ((_c = data.location) === null || _c === void 0 ? void 0 : _c.name) || data.location, locationId: ((_d = data.location) === null || _d === void 0 ? void 0 : _d.locationId) || data.locationId, action: data.action || 'RFID_DETECTED', timestamp: data.timestamp || new Date() }, data));
                 return;
             }
             const batchKey = type;

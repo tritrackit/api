@@ -400,7 +400,6 @@ let UnitsService = UnitsService_1 = class UnitsService {
             _noToast: false
         };
         this.pusherService.sendRegistrationUrgent(predictiveData);
-        this.pusherService.reSync('units', predictiveData, true);
     }
     async executeMinimalTransaction(rfid, scanner, additionalData) {
         return await this.unitsRepo.manager.transaction(async (entityManager) => {
@@ -481,17 +480,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
             _noToast: false,
             unit: unitData
         };
-        Promise.all([
-            this.pusherService.sendRegistrationEventImmediate({
-                rfid: unit.rfid,
-                scannerCode,
-                timestamp: new Date(),
-                location: scanner.location,
-                scannerType: scanner.scannerType,
-                employeeUser: scanner.assignedEmployeeUser
-            }),
-            this.pusherService.reSync('units', confirmedData, true)
-        ]).catch(err => {
+        this.pusherService.sendRegistrationUrgent(confirmedData).catch(err => {
             this.logger.debug(`Async Pusher send failed: ${err.message}`);
         });
     }
@@ -622,6 +611,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
         } : null;
         this.pusherService.reSync('units', {
             rfid: result.unit.rfid,
+            scannerCode: scannerCode,
             action: result.action,
             location: result.newLocation.name,
             locationId: result.newLocation.locationId,
@@ -1263,16 +1253,16 @@ let UnitsService = UnitsService_1 = class UnitsService {
                     return hasEmployeeCode;
                 })
                     .forEach((e) => {
-                    var _a, _b, _c, _d, _e, _f, _g;
+                    var _a, _b, _c, _d, _e, _f;
                     this.logger.debug(`⚡ Sending registration event for RFID: ${e.rfid}, Employee: ${(_a = e.employeeUser) === null || _a === void 0 ? void 0 : _a.employeeUserCode}`);
                     const unitCacheKey = this.keyUnit(e.rfid);
                     this.cacheService.del(unitCacheKey);
-                    const reSyncData = {
+                    const rfidData = {
                         rfid: e.rfid,
-                        action: 'RFID_DETECTED',
                         scannerCode: e.scannerCode,
                         location: (_b = e.location) === null || _b === void 0 ? void 0 : _b.name,
                         locationId: (_c = e.location) === null || _c === void 0 ? void 0 : _c.locationId,
+                        action: 'RFID_DETECTED',
                         status: ((_d = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _d === void 0 ? void 0 : _d.name) || 'FOR DELIVERY',
                         statusId: (_e = scanner === null || scanner === void 0 ? void 0 : scanner.status) === null || _e === void 0 ? void 0 : _e.statusId,
                         employeeUserCode: (_f = e.employeeUser) === null || _f === void 0 ? void 0 : _f.employeeUserCode,
@@ -1280,11 +1270,8 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         _autoDisplay: true,
                         _noToast: false
                     };
-                    Promise.all([
-                        Promise.resolve(this.pusherService.sendTriggerRegister((_g = e.employeeUser) === null || _g === void 0 ? void 0 : _g.employeeUserCode, e)),
-                        Promise.resolve(this.pusherService.reSync('units', reSyncData, true))
-                    ]).catch(err => {
-                        this.logger.error(`Failed to send parallel registration events: ${err.message}`);
+                    this.pusherService.sendRegistrationUrgent(rfidData).catch(err => {
+                        this.logger.error(`Failed to send RFID registration event: ${err.message}`);
                     });
                 });
             }

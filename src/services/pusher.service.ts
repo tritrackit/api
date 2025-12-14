@@ -88,38 +88,24 @@ export class PusherService {
 
   /**
    * ReSync event - non-blocking for better performance
-   * Urgent/RFID events sent immediately with ZERO delay, other events batched with 10ms delay
+   * RFID events routed through emergency channel, other events batched with 10ms delay
    * If same RFID is updated multiple times, only latest state is sent
    */
   reSync(type: string, data: any, urgent: boolean = false): void {
     try {
-      // ⚡ URGENT/RFID EVENTS: SEND IMMEDIATELY, NO BATCHING, NO DELAY
+      // ⚡ RFID EVENTS: Route through emergency channel (no duplicates)
       if (urgent || data?.rfid || data?.action?.includes('RFID') || data?.action?.includes('REGISTER') || data?.action === 'RFID_DETECTED') {
-        const startTime = Date.now();
-        const channel = "all";
-        const event = "reSync";
+        this.logger.debug(`⚡ Routing RFID event through emergency channel: ${data?.action || 'RFID event'}`);
         
-        this.logger.debug(`⚡ URGENT Pusher: ${data?.action || 'RFID event'} (0ms delay)`);
-        
-        // ⚡ DIRECT TRIGGER - No promises, no awaits, fire and forget
-        this.pusher.trigger(channel, event, {
-          type,
-          data: {
-            ...data,
-            _pusherSentAt: startTime,
-            _urgent: true,
-            _zeroDelay: true
-          }
-        }).then(() => {
-          const latency = Date.now() - startTime;
-          this.logger.debug(`⚡ URGENT Pusher sent: ${latency}ms`);
-          
-          if (latency > 50) {
-            this.logger.warn(`⚠️ High Pusher latency: ${latency}ms for RFID event`);
-          }
-        }).catch(err => {
-          // Silent fail - don't throw, don't log error for real-time
-          this.logger.debug(`Pusher trigger failed (non-critical): ${err.message}`);
+        // ⚡ Route ALL RFID events through sendRegistrationUrgent (single channel)
+        this.sendRegistrationUrgent({
+          rfid: data.rfid,
+          scannerCode: data.scannerCode,
+          location: data.location?.name || data.location,
+          locationId: data.location?.locationId || data.locationId,
+          action: data.action || 'RFID_DETECTED',
+          timestamp: data.timestamp || new Date(),
+          ...data // Include any additional fields
         });
         
         return; // ⚡ EXIT IMMEDIATELY - don't enter batching logic at all
