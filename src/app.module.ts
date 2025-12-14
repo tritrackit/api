@@ -3,6 +3,7 @@ import { AppService } from "./app.service";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TypeOrmConfigService } from "./db/typeorm/typeorm.service";
 import { ConfigModule } from "@nestjs/config";
+import { HttpModule } from "@nestjs/axios";
 import { AuthModule } from "./controller/auth/auth.module";
 import { getEnvPath } from "./common/utils/utils";
 import { RoleModule } from "./controller/role/role.module";
@@ -26,6 +27,7 @@ import { RfidGateway } from "./gateways/rfid.gateway";
       ],
       isGlobal: true,
     }),
+    HttpModule,
     TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
     AuthModule,
     EmployeeUserModule,

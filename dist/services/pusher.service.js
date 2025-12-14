@@ -16,12 +16,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PusherService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const axios_1 = require("@nestjs/axios");
+const rxjs_1 = require("rxjs");
 const rfid_gateway_1 = require("../gateways/rfid.gateway");
 const Pusher = require("pusher");
 let PusherService = PusherService_1 = class PusherService {
-    constructor(config, rfidGateway) {
+    constructor(config, httpService, rfidGateway) {
         var _a, _b;
         this.config = config;
+        this.httpService = httpService;
         this.rfidGateway = rfidGateway;
         this.logger = new common_1.Logger(PusherService_1.name);
         this.batchQueue = new Map();
@@ -211,15 +214,29 @@ let PusherService = PusherService_1 = class PusherService {
             try {
                 this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
                 const socketLatency = Date.now() - startTime;
-                this.logger.debug(`⚡ Socket.io sent: ${socketLatency}ms for ${data.rfid}`);
+                this.logger.debug(`⚡ Socket.io (local) sent: ${socketLatency}ms for ${data.rfid}`);
                 return Promise.resolve(socketLatency);
             }
             catch (err) {
-                this.logger.warn(`Socket.io failed, falling back to Pusher: ${err.message}`);
+                this.logger.warn(`Socket.io (local) failed: ${err.message}`);
             }
         }
-        else {
-            this.logger.debug(`⚠️ RfidGateway not available, using Pusher fallback for ${data.rfid}`);
+        const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
+        if (externalSocketUrl) {
+            (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
+                event: 'rfid-urgent',
+                data: emergencyPayload
+            }, {
+                timeout: 1000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })).then(() => {
+                const latency = Date.now() - startTime;
+                this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
+            }).catch((err) => {
+                this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
+            });
         }
         return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
             .then(() => {
@@ -253,9 +270,10 @@ let PusherService = PusherService_1 = class PusherService {
 };
 PusherService = PusherService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(1, (0, common_1.Optional)()),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => rfid_gateway_1.RfidGateway))),
+    __param(2, (0, common_1.Optional)()),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => rfid_gateway_1.RfidGateway))),
     __metadata("design:paramtypes", [config_1.ConfigService,
+        axios_1.HttpService,
         rfid_gateway_1.RfidGateway])
 ], PusherService);
 exports.PusherService = PusherService;

@@ -15,6 +15,7 @@ const app_service_1 = require("./app.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_service_1 = require("./db/typeorm/typeorm.service");
 const config_1 = require("@nestjs/config");
+const axios_1 = require("@nestjs/axios");
 const auth_module_1 = require("./controller/auth/auth.module");
 const role_module_1 = require("./controller/role/role.module");
 const employee_user_module_1 = require("./controller/employee-user/employee-user.module");
@@ -51,6 +52,7 @@ AppModule = __decorate([
                 ],
                 isGlobal: true,
             }),
+            axios_1.HttpModule,
             typeorm_1.TypeOrmModule.forRootAsync({ useClass: typeorm_service_1.TypeOrmConfigService }),
             auth_module_1.AuthModule,
             employee_user_module_1.EmployeeUserModule,

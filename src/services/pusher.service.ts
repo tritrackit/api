@@ -1,5 +1,7 @@
 import { Injectable, Logger, Inject, Optional, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { HttpService } from "@nestjs/axios";
+import { firstValueFrom } from "rxjs";
 import { EmployeeUsers } from "src/db/entities/EmployeeUsers";
 import { Locations } from "src/db/entities/Locations";
 import { RfidGateway } from "../gateways/rfid.gateway";
@@ -22,6 +24,7 @@ export class PusherService {
   private readonly BATCH_DELAY_MS = 10;
   constructor(
     private readonly config: ConfigService,
+    private readonly httpService: HttpService,
     @Optional() @Inject(forwardRef(() => RfidGateway)) private rfidGateway?: RfidGateway
   ) {
     const appId = this.config.get<string>("PUSHER_APPID");
@@ -280,22 +283,43 @@ export class PusherService {
       ...(data.scannerType && { scannerType: data.scannerType })
     };
     
-    // ⚡ Try Socket.io first (ultra-fast, <10ms)
+    // ⚡ Priority 1: Try local Socket.io first (ultra-fast, <10ms)
     if (this.rfidGateway) {
       try {
         this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
         const socketLatency = Date.now() - startTime;
-        this.logger.debug(`⚡ Socket.io sent: ${socketLatency}ms for ${data.rfid}`);
+        this.logger.debug(`⚡ Socket.io (local) sent: ${socketLatency}ms for ${data.rfid}`);
         return Promise.resolve(socketLatency);
       } catch (err) {
-        this.logger.warn(`Socket.io failed, falling back to Pusher: ${err.message}`);
-        // Continue to Pusher fallback
+        this.logger.warn(`Socket.io (local) failed: ${err.message}`);
+        // Continue to external Socket.io server
       }
-    } else {
-      this.logger.debug(`⚠️ RfidGateway not available, using Pusher fallback for ${data.rfid}`);
     }
     
-    // 🔄 Fallback to Pusher (if Socket.io fails or not available)
+    // ⚡ Priority 2: Try external Socket.io server (Railway/Render) via HTTP (fire-and-forget)
+    const externalSocketUrl = this.config.get<string>('EXTERNAL_SOCKET_IO_URL');
+    if (externalSocketUrl) {
+      // Fire-and-forget: Send to external Socket.io server, but don't wait
+      firstValueFrom(
+        this.httpService.post(`${externalSocketUrl}/emit`, {
+          event: 'rfid-urgent',
+          data: emergencyPayload
+        }, {
+          timeout: 1000, // 1 second timeout
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+      ).then(() => {
+        const latency = Date.now() - startTime;
+        this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
+      }).catch((err) => {
+        this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
+      });
+      // Continue to Pusher fallback immediately (don't wait for external Socket.io)
+    }
+    
+    // 🔄 Priority 3: Fallback to Pusher (if Socket.io fails or not available)
     return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
       .then(() => {
         const latency = Date.now() - startTime;
