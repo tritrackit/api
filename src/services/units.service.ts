@@ -1246,7 +1246,7 @@ export class UnitsService {
           });
           alreadyNotifiedRfids.add(rfid);
           
-          // ⚡ Send URGENT notification IMMEDIATELY
+          // ⚡ Send URGENT notification IMMEDIATELY (fire-and-forget)
           this.pusherService.sendRegistrationUrgent({
             rfid,
             scannerCode,
@@ -1255,6 +1255,8 @@ export class UnitsService {
             employeeUser: scanner.assignedEmployeeUser,
             _immediate: true,
             _sentAt: Date.now()
+          }).catch(err => {
+            this.logger.error(`Failed to send urgent registration event: ${err.message}`);
           });
         }
       }
@@ -1293,25 +1295,99 @@ export class UnitsService {
         }
   
         if (!unit) {
-          // Skip if already notified outside transaction (registration scanner)
-          if (alreadyNotifiedRfids.has(rfid) && scanner.scannerType === "REGISTRATION") {
-            this.logger.debug(`RFID ${rfid} already notified outside transaction, skipping`);
+          // For REGISTRATION scanner: Create the unit if it doesn't exist
+          if (scanner.scannerType === "REGISTRATION") {
+            // Validate scanner has required fields before creating unit
+            if (!scanner.status || !scanner.location || !scanner.assignedEmployeeUser) {
+              this.logger.error(`Cannot create unit for RFID ${rfid}: Scanner missing required fields (status: ${!!scanner.status}, location: ${!!scanner.location}, employee: ${!!scanner.assignedEmployeeUser})`);
+              // Add to registerEvents anyway for notification (unit creation will happen later via web interface)
+              registerEvents.push({
+                rfid,
+                scannerCode,
+                timestamp: log.timestamp,
+                employeeUser: scanner.assignedEmployeeUser,
+                location: scanner.location,
+              });
+              continue;
+            }
+            
+            this.logger.debug(`Creating new unit for RFID: ${rfid} via registration scanner`);
+            
+            try {
+              // Get a default model (use first available model)
+              const models = await entityManager.find(Model, {
+                order: { modelId: 'ASC' },
+                take: 1,
+              });
+              const defaultModel = models.length > 0 ? models[0] : null;
+              
+              if (!defaultModel) {
+                this.logger.error(`No models found in database. Cannot create unit for RFID: ${rfid}`);
+                // Add to registerEvents for notification (unit creation will happen later via web interface)
+                registerEvents.push({
+                  rfid,
+                  scannerCode,
+                  timestamp: log.timestamp,
+                  employeeUser: scanner.assignedEmployeeUser,
+                  location: scanner.location,
+                });
+                continue;
+              }
+              
+              // Create the unit within the existing transaction
+              const newUnit = new Units();
+              newUnit.rfid = rfid;
+              newUnit.chassisNo = `CH-${rfid}`;
+              newUnit.color = "Auto-Registered";
+              newUnit.description = `Auto-registered at ${scanner.location.name || 'Registration Area'}`;
+              newUnit.dateCreated = new Date();
+              newUnit.status = scanner.status;
+              newUnit.location = scanner.location;
+              newUnit.createdBy = scanner.assignedEmployeeUser;
+              newUnit.model = defaultModel; // ⚠️ CRITICAL: Set model to satisfy NOT NULL constraint
+              
+              // Save unit within transaction
+              const savedUnit = await entityManager.save(Units, newUnit);
+              
+              // Generate unit code
+              savedUnit.unitCode = `U-${generateIndentityCode(savedUnit.unitId)}`;
+              await entityManager.save(Units, savedUnit);
+              
+              this.logger.debug(`Unit created successfully: ${savedUnit.unitCode} for RFID: ${rfid}`);
+              
+              // Update unitMemo with the newly created unit
+              unitMemo.set(rfid, savedUnit);
+              unit = savedUnit;
+              
+              // Add to registerEvents for Pusher notification
+              registerEvents.push({
+                rfid,
+                scannerCode,
+                timestamp: log.timestamp,
+                employeeUser: scanner.assignedEmployeeUser,
+                location: scanner.location,
+              });
+              
+              // Continue to create UnitLog for this newly registered unit
+              // (don't continue/break here - let it create the log below)
+            } catch (error) {
+              this.logger.error(`Failed to create unit for RFID ${rfid}: ${error.message}`, error.stack);
+              // Add to registerEvents for notification even if creation failed
+              registerEvents.push({
+                rfid,
+                scannerCode,
+                timestamp: log.timestamp,
+                employeeUser: scanner.assignedEmployeeUser,
+                location: scanner.location,
+              });
+              // Skip this RFID if unit creation failed
+              continue;
+            }
+          } else {
+            // Location scanner scanned unregistered RFID - log error and skip
+            this.logger.error(`Location scanner "${scanner.name}" (${scannerCode}) scanned unregistered RFID: ${rfid}`);
             continue;
           }
-          
-          if (scanner.scannerType === "REGISTRATION") {
-            // This shouldn't happen if pre-check worked, but keep for safety
-            registerEvents.push({
-              rfid,
-              scannerCode,
-              timestamp: log.timestamp,
-              employeeUser: scanner.assignedEmployeeUser,
-              location: scanner.location,
-            });
-          } else {
-            this.logger.error(`Location scanner "${scanner.name}" (${scannerCode}) scanned unregistered RFID: ${rfid}`);
-          }
-          continue;
         }
   
         if (scanner.scannerType === "LOCATION") {

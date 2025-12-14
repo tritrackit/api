@@ -296,30 +296,54 @@ export class PusherService {
       }
     }
     
-    // ⚡ Priority 2: Try external Socket.io server (Railway/Render) via HTTP (fire-and-forget)
+    // ⚡ Priority 2: Try external Socket.io server (Railway/Render) via HTTP
     const externalSocketUrl = this.config.get<string>('EXTERNAL_SOCKET_IO_URL');
     if (externalSocketUrl) {
-      // Fire-and-forget: Send to external Socket.io server, but don't wait
-      firstValueFrom(
-        this.httpService.post(`${externalSocketUrl}/emit`, {
-          event: 'rfid-urgent',
-          data: emergencyPayload
-        }, {
-          timeout: 1000, // 1 second timeout
-          headers: {
-            'Content-Type': 'application/json'
+      // Wait for Socket.io response - if successful, return early (don't use Pusher)
+      try {
+        return firstValueFrom(
+          this.httpService.post(`${externalSocketUrl}/emit`, {
+            event: 'rfid-urgent',
+            data: emergencyPayload
+          }, {
+            timeout: 3000, // 3 second timeout (increased from 1s)
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Source': 'tritrackit-api-vercel'
+            }
+          })
+        )
+        .then((response) => {
+          const latency = Date.now() - startTime;
+          this.logger.log(`✅ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
+          if (response?.data) {
+            this.logger.debug(`📊 Socket.io response: ${JSON.stringify(response.data)}`);
           }
+          return latency;
         })
-      ).then(() => {
-        const latency = Date.now() - startTime;
-        this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
-      }).catch((err) => {
-        this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
-      });
-      // Continue to Pusher fallback immediately (don't wait for external Socket.io)
+        .catch((err) => {
+          this.logger.warn(`❌ Socket.io (external) failed: ${err.message} - Using Pusher fallback`);
+          // Fall through to Pusher fallback
+          return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+        });
+      } catch (err) {
+        // Catch any synchronous errors (e.g., invalid URL, network setup issues)
+        this.logger.warn(`❌ Socket.io (external) setup failed: ${err.message} - Using Pusher fallback`);
+        return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+      }
+    } else {
+      this.logger.debug('EXTERNAL_SOCKET_IO_URL not configured, using Pusher only');
     }
     
     // 🔄 Priority 3: Fallback to Pusher (if Socket.io fails or not available)
+    return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+  }
+
+  /**
+   * Fallback to Pusher when Socket.io fails or is not available
+   */
+  private fallbackToPusher(emergencyPayload: any, startTime: number, rfid: string): Promise<number> {
+    this.logger.debug(`🔄 Using Pusher fallback for ${rfid}`);
     return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
       .then(() => {
         const latency = Date.now() - startTime;
@@ -327,9 +351,9 @@ export class PusherService {
         const cluster = this.config.get<string>('PUSHER_CLUSTER') || 'unknown';
         
         if (latency > 30) {
-          this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${data.rfid} (env: ${environment}, cluster: ${cluster})`);
+          this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${rfid} (env: ${environment}, cluster: ${cluster})`);
         } else {
-          this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms`);
+          this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms for ${rfid}`);
         }
         
         return latency;
@@ -337,7 +361,7 @@ export class PusherService {
       .catch((err) => {
         const latency = Date.now() - startTime;
         const environment = this.config.get<string>('NODE_ENV') || 'unknown';
-        this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms, env: ${environment})`);
+        this.logger.error(`💥 All notification methods failed: ${err.message} (${latency}ms, env: ${environment})`);
         return latency;
       });
   }

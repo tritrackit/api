@@ -1056,6 +1056,8 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         employeeUser: scanner.assignedEmployeeUser,
                         _immediate: true,
                         _sentAt: Date.now()
+                    }).catch(err => {
+                        this.logger.error(`Failed to send urgent registration event: ${err.message}`);
                     });
                 }
             }
@@ -1082,23 +1084,59 @@ let UnitsService = UnitsService_1 = class UnitsService {
                     this.logger.debug(`Current Status: ${(_d = unit.status) === null || _d === void 0 ? void 0 : _d.name} (${(_e = unit.status) === null || _e === void 0 ? void 0 : _e.statusId})`);
                 }
                 if (!unit) {
-                    if (alreadyNotifiedRfids.has(rfid) && scanner.scannerType === "REGISTRATION") {
-                        this.logger.debug(`RFID ${rfid} already notified outside transaction, skipping`);
-                        continue;
-                    }
                     if (scanner.scannerType === "REGISTRATION") {
-                        registerEvents.push({
-                            rfid,
-                            scannerCode,
-                            timestamp: log.timestamp,
-                            employeeUser: scanner.assignedEmployeeUser,
-                            location: scanner.location,
-                        });
+                        if (!scanner.status || !scanner.location || !scanner.assignedEmployeeUser) {
+                            this.logger.error(`Cannot create unit for RFID ${rfid}: Scanner missing required fields (status: ${!!scanner.status}, location: ${!!scanner.location}, employee: ${!!scanner.assignedEmployeeUser})`);
+                            registerEvents.push({
+                                rfid,
+                                scannerCode,
+                                timestamp: log.timestamp,
+                                employeeUser: scanner.assignedEmployeeUser,
+                                location: scanner.location,
+                            });
+                            continue;
+                        }
+                        this.logger.debug(`Creating new unit for RFID: ${rfid} via registration scanner`);
+                        try {
+                            const newUnit = new Units_1.Units();
+                            newUnit.rfid = rfid;
+                            newUnit.chassisNo = `CH-${rfid}`;
+                            newUnit.color = "Auto-Registered";
+                            newUnit.description = `Auto-registered at ${scanner.location.name || 'Registration Area'}`;
+                            newUnit.dateCreated = new Date();
+                            newUnit.status = scanner.status;
+                            newUnit.location = scanner.location;
+                            newUnit.createdBy = scanner.assignedEmployeeUser;
+                            const savedUnit = await entityManager.save(Units_1.Units, newUnit);
+                            savedUnit.unitCode = `U-${(0, utils_1.generateIndentityCode)(savedUnit.unitId)}`;
+                            await entityManager.save(Units_1.Units, savedUnit);
+                            this.logger.debug(`Unit created successfully: ${savedUnit.unitCode} for RFID: ${rfid}`);
+                            unitMemo.set(rfid, savedUnit);
+                            unit = savedUnit;
+                            registerEvents.push({
+                                rfid,
+                                scannerCode,
+                                timestamp: log.timestamp,
+                                employeeUser: scanner.assignedEmployeeUser,
+                                location: scanner.location,
+                            });
+                        }
+                        catch (error) {
+                            this.logger.error(`Failed to create unit for RFID ${rfid}: ${error.message}`, error.stack);
+                            registerEvents.push({
+                                rfid,
+                                scannerCode,
+                                timestamp: log.timestamp,
+                                employeeUser: scanner.assignedEmployeeUser,
+                                location: scanner.location,
+                            });
+                            continue;
+                        }
                     }
                     else {
                         this.logger.error(`Location scanner "${scanner.name}" (${scannerCode}) scanned unregistered RFID: ${rfid}`);
+                        continue;
                     }
-                    continue;
                 }
                 if (scanner.scannerType === "LOCATION") {
                     try {

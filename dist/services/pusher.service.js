@@ -223,20 +223,25 @@ let PusherService = PusherService_1 = class PusherService {
         }
         const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
         if (externalSocketUrl) {
-            (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
-                event: 'rfid-urgent',
-                data: emergencyPayload
-            }, {
-                timeout: 1000,
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })).then(() => {
-                const latency = Date.now() - startTime;
-                this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
-            }).catch((err) => {
-                this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
-            });
+            try {
+                (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
+                    event: 'rfid-urgent',
+                    data: emergencyPayload
+                }, {
+                    timeout: 1000,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })).then(() => {
+                    const latency = Date.now() - startTime;
+                    this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
+                }).catch((err) => {
+                    this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
+                });
+            }
+            catch (err) {
+                this.logger.warn(`Socket.io (external) setup failed: ${err.message}, using Pusher fallback`);
+            }
         }
         return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
             .then(() => {
