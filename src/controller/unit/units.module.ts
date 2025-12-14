@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { UnitsController } from "./units.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { HttpModule } from "@nestjs/axios";
 import { Units } from "src/db/entities/Units";
 import { UnitsService } from "src/services/units.service";
 import { FirebaseProviderModule } from "src/core/provider/firebase/firebase-provider.module";
@@ -11,7 +12,7 @@ import { Scanner } from "src/db/entities/Scanner";
 import { RfidGateway } from "src/gateways/rfid.gateway";
 
 @Module({
-  imports: [FirebaseProviderModule, TypeOrmModule.forFeature([Units, Scanner])],
+  imports: [FirebaseProviderModule, TypeOrmModule.forFeature([Units, Scanner]), HttpModule],
   controllers: [UnitsController],
   providers: [UnitsService, PusherService, ScannerService, ApiKeyScannerGuard, RfidGateway],
   exports: [UnitsService, PusherService],
