@@ -1026,9 +1026,12 @@ let UnitsService = UnitsService_1 = class UnitsService {
         return lastLog !== null && lastLog !== void 0 ? lastLog : null;
     }
     async unitLogs(logsDto, scannerCode) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         const processStart = Date.now();
-        if (!((_a = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _a === void 0 ? void 0 : _a.length)) {
+        const requestId = `req_${processStart}_${Math.random().toString(36).substr(2, 9)}`;
+        this.logger.log(`🚀 [${requestId}] RFID Scan received: ${((_a = logsDto.data) === null || _a === void 0 ? void 0 : _a.length) || 0} RFID(s)`);
+        if (!((_b = logsDto === null || logsDto === void 0 ? void 0 : logsDto.data) === null || _b === void 0 ? void 0 : _b.length)) {
+            this.logger.warn(`⚠️ [${requestId}] No RFID data in request`);
             return [];
         }
         const scanner = await this.getScannerCached(this.unitsRepo.manager, scannerCode);
@@ -1048,6 +1051,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp || Date.now())
                     });
                     alreadyNotifiedRfids.add(rfid);
+                    this.logger.log(`📤 [${requestId}] Sending urgent notification for RFID: ${rfid} (BEFORE database save, fire-and-forget)`);
                     this.pusherService.sendRegistrationUrgent({
                         rfid,
                         scannerCode,
@@ -1056,12 +1060,17 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         employeeUser: scanner.assignedEmployeeUser,
                         _immediate: true,
                         _sentAt: Date.now()
-                    }).catch(err => {
-                        this.logger.error(`Failed to send urgent registration event: ${err.message}`);
+                    })
+                        .then((latency) => {
+                        this.logger.log(`✅ [${requestId}] Notification sent for ${rfid}: ${latency}ms`);
+                    })
+                        .catch(err => {
+                        this.logger.error(`❌ [${requestId}] Notification failed for ${rfid}: ${err.message}`);
                     });
                 }
             }
         }
+        this.logger.log(`💾 [${requestId}] Attempting database save for ${logsDto.data.length} RFID(s)`);
         const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
             var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2;
             const unitLogs = [];
@@ -1085,70 +1094,15 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 }
                 if (!unit) {
                     if (scanner.scannerType === "REGISTRATION") {
-                        if (!scanner.status || !scanner.location || !scanner.assignedEmployeeUser) {
-                            this.logger.error(`Cannot create unit for RFID ${rfid}: Scanner missing required fields (status: ${!!scanner.status}, location: ${!!scanner.location}, employee: ${!!scanner.assignedEmployeeUser})`);
-                            registerEvents.push({
-                                rfid,
-                                scannerCode,
-                                timestamp: log.timestamp,
-                                employeeUser: scanner.assignedEmployeeUser,
-                                location: scanner.location,
-                            });
-                            continue;
-                        }
-                        this.logger.debug(`Creating new unit for RFID: ${rfid} via registration scanner`);
-                        try {
-                            const models = await entityManager.find(Model_1.Model, {
-                                order: { modelId: 'ASC' },
-                                take: 1,
-                            });
-                            const defaultModel = models.length > 0 ? models[0] : null;
-                            if (!defaultModel) {
-                                this.logger.error(`No models found in database. Cannot create unit for RFID: ${rfid}`);
-                                registerEvents.push({
-                                    rfid,
-                                    scannerCode,
-                                    timestamp: log.timestamp,
-                                    employeeUser: scanner.assignedEmployeeUser,
-                                    location: scanner.location,
-                                });
-                                continue;
-                            }
-                            const newUnit = new Units_1.Units();
-                            newUnit.rfid = rfid;
-                            newUnit.chassisNo = `CH-${rfid}`;
-                            newUnit.color = "Auto-Registered";
-                            newUnit.description = `Auto-registered at ${scanner.location.name || 'Registration Area'}`;
-                            newUnit.dateCreated = new Date();
-                            newUnit.status = scanner.status;
-                            newUnit.location = scanner.location;
-                            newUnit.createdBy = scanner.assignedEmployeeUser;
-                            newUnit.model = defaultModel;
-                            const savedUnit = await entityManager.save(Units_1.Units, newUnit);
-                            savedUnit.unitCode = `U-${(0, utils_1.generateIndentityCode)(savedUnit.unitId)}`;
-                            await entityManager.save(Units_1.Units, savedUnit);
-                            this.logger.debug(`Unit created successfully: ${savedUnit.unitCode} for RFID: ${rfid}`);
-                            unitMemo.set(rfid, savedUnit);
-                            unit = savedUnit;
-                            registerEvents.push({
-                                rfid,
-                                scannerCode,
-                                timestamp: log.timestamp,
-                                employeeUser: scanner.assignedEmployeeUser,
-                                location: scanner.location,
-                            });
-                        }
-                        catch (error) {
-                            this.logger.error(`Failed to create unit for RFID ${rfid}: ${error.message}`, error.stack);
-                            registerEvents.push({
-                                rfid,
-                                scannerCode,
-                                timestamp: log.timestamp,
-                                employeeUser: scanner.assignedEmployeeUser,
-                                location: scanner.location,
-                            });
-                            continue;
-                        }
+                        this.logger.debug(`REGISTRATION scanner scanned unregistered RFID: ${rfid} - Sending notification for manual registration`);
+                        registerEvents.push({
+                            rfid,
+                            scannerCode,
+                            timestamp: log.timestamp,
+                            employeeUser: scanner.assignedEmployeeUser,
+                            location: scanner.location,
+                        });
+                        continue;
                     }
                     else {
                         this.logger.error(`Location scanner "${scanner.name}" (${scannerCode}) scanned unregistered RFID: ${rfid}`);
@@ -1335,20 +1289,20 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 const rfidsToUpdate = Array.from(new Set(result.unitLogs.map((l) => l.unit.rfid)));
                 this.logger.debug(`Updating cache for ${rfidsToUpdate.length} RFIDs`);
                 for (const rfid of rfidsToUpdate) {
-                    const newest = (_b = result.unitLogs
+                    const newest = (_c = result.unitLogs
                         .filter((l) => l.unit.rfid === rfid)
-                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _b !== void 0 ? _b : null;
+                        .sort((a, b) => +b.timestamp - +a.timestamp)[0]) !== null && _c !== void 0 ? _c : null;
                     this.cacheService.set(this.keyLastLog(rfid), newest, {
                         ttlSeconds: 1,
                     });
                 }
             }
             const totalTime = Date.now() - processStart;
-            this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, ${((_c = result === null || result === void 0 ? void 0 : result.unitLogs) === null || _c === void 0 ? void 0 : _c.length) || 0} in transaction`);
+            this.logger.log(`✅ [${requestId}] Database saved: ${totalTime}ms, ${immediateNotifications.length} immediate notifications, ${((_d = result === null || result === void 0 ? void 0 : result.unitLogs) === null || _d === void 0 ? void 0 : _d.length) || 0} unit logs created`);
             return result.unitLogs;
         }
         const totalTime = Date.now() - processStart;
-        this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, 0 in transaction`);
+        this.logger.log(`✅ [${requestId}] Processing complete: ${totalTime}ms, ${immediateNotifications.length} immediate notifications, 0 in transaction`);
         return Array.isArray(result) ? result : [];
     }
     async getActivityHistory(unitCode, pageSize = 50, pageIndex = 0) {

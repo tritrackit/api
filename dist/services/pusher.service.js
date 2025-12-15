@@ -205,11 +205,68 @@ let PusherService = PusherService_1 = class PusherService {
         }
     }
     sendRegistrationUrgent(data) {
-        var _a, _b;
+        var _a, _b, _c, _d, _e;
         const startTime = Date.now();
-        const locationName = ((_a = data.location) === null || _a === void 0 ? void 0 : _a.name) || (typeof data.location === 'string' ? data.location : 'Unknown');
-        const locationId = ((_b = data.location) === null || _b === void 0 ? void 0 : _b.locationId) || data.locationId;
+        const requestId = `push_${startTime}_${((_a = data.rfid) === null || _a === void 0 ? void 0 : _a.substring(0, 8)) || 'unknown'}`;
+        this.logger.log(`🎯 [${requestId}] sendRegistrationUrgent CALLED for RFID: ${data.rfid}`);
+        this.logger.debug(`📋 [${requestId}] Payload:`, {
+            rfid: data.rfid,
+            scannerCode: data.scannerCode,
+            action: data.action,
+            location: ((_b = data.location) === null || _b === void 0 ? void 0 : _b.name) || data.location,
+            locationId: data.locationId || ((_c = data.location) === null || _c === void 0 ? void 0 : _c.locationId),
+            hasModelId: !!(data.modelId || data.ModelId),
+            modelId: data.modelId || data.ModelId
+        });
+        const locationName = ((_d = data.location) === null || _d === void 0 ? void 0 : _d.name) || (typeof data.location === 'string' ? data.location : 'Unknown');
+        const locationId = ((_e = data.location) === null || _e === void 0 ? void 0 : _e.locationId) || data.locationId;
         const emergencyPayload = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ rfid: data.rfid, scannerCode: data.scannerCode, location: locationName, locationId: locationId, _sentAt: startTime, _instant: true }, (data.action && { action: data.action })), (data.transactionId && { transactionId: data.transactionId })), (data.status && { status: data.status })), (data.statusId && { statusId: data.statusId })), (data.employeeUserCode && { employeeUserCode: data.employeeUserCode })), (data.scannerType && { scannerType: data.scannerType }));
+        const isProduction = this.config.get('NODE_ENV') === 'production';
+        const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
+        this.logger.log(`🔍 [${requestId}] DEBUG: isProduction=${isProduction}, externalSocketUrl=${externalSocketUrl ? `SET (${externalSocketUrl.substring(0, 30)}...)` : 'NOT SET'}`);
+        if (isProduction && externalSocketUrl) {
+            try {
+                return (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
+                    event: 'rfid-urgent',
+                    data: emergencyPayload
+                }, {
+                    timeout: 3000,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Source': 'tritrackit-api-vercel'
+                    }
+                }))
+                    .then((response) => {
+                    const latency = Date.now() - startTime;
+                    this.logger.log(`✅ Socket.io (Railway) sent: ${latency}ms for ${data.rfid}`);
+                    if (response === null || response === void 0 ? void 0 : response.data) {
+                        this.logger.debug(`📊 Socket.io response: ${JSON.stringify(response.data)}`);
+                    }
+                    return latency;
+                })
+                    .catch((err) => {
+                    this.logger.warn(`❌ Socket.io (Railway) failed: ${err.message} - Trying local Socket.io or Pusher`);
+                    if (this.rfidGateway) {
+                        try {
+                            this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
+                            const socketLatency = Date.now() - startTime;
+                            this.logger.debug(`⚡ Socket.io (local) sent: ${socketLatency}ms for ${data.rfid}`);
+                            return socketLatency;
+                        }
+                        catch (localErr) {
+                            this.logger.warn(`Socket.io (local) failed: ${localErr.message} - Using Pusher fallback`);
+                            return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+                        }
+                    }
+                    else {
+                        return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+                    }
+                });
+            }
+            catch (err) {
+                this.logger.warn(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+            }
+        }
         if (this.rfidGateway) {
             try {
                 this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
@@ -221,8 +278,7 @@ let PusherService = PusherService_1 = class PusherService {
                 this.logger.warn(`Socket.io (local) failed: ${err.message}`);
             }
         }
-        const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
-        if (externalSocketUrl) {
+        if (!isProduction && externalSocketUrl) {
             try {
                 return (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
                     event: 'rfid-urgent',
@@ -252,7 +308,7 @@ let PusherService = PusherService_1 = class PusherService {
                 return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
             }
         }
-        else {
+        if (!externalSocketUrl) {
             this.logger.debug('EXTERNAL_SOCKET_IO_URL not configured, using Pusher only');
         }
         return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
