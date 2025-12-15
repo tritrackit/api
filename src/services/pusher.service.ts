@@ -296,7 +296,60 @@ export class PusherService {
       ...(data.scannerType && { scannerType: data.scannerType })
     };
     
-    // ⚡ Priority 1: Try local Socket.io first (ultra-fast, <10ms)
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    const externalSocketUrl = this.config.get<string>('EXTERNAL_SOCKET_IO_URL');
+    
+    // ⚡ PRODUCTION: Prioritize Railway Socket.io (Vercel doesn't support WebSockets)
+    // ⚡ DEVELOPMENT: Try local Socket.io first (for local testing)
+    if (isProduction && externalSocketUrl) {
+      // ⚡ Priority 1 (Production): External Socket.io server (Railway) via HTTP
+      try {
+        return firstValueFrom(
+          this.httpService.post(`${externalSocketUrl}/emit`, {
+            event: 'rfid-urgent',
+            data: emergencyPayload
+          }, {
+            timeout: 3000, // 3 second timeout
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Source': 'tritrackit-api-vercel'
+            }
+          })
+        )
+        .then((response) => {
+          const latency = Date.now() - startTime;
+          this.logger.log(`✅ Socket.io (Railway) sent: ${latency}ms for ${data.rfid}`);
+          if (response?.data) {
+            this.logger.debug(`📊 Socket.io response: ${JSON.stringify(response.data)}`);
+          }
+          return latency;
+        })
+        .catch((err) => {
+          this.logger.warn(`❌ Socket.io (Railway) failed: ${err.message} - Trying local Socket.io or Pusher`);
+          // Fall through to local Socket.io (if available) or Pusher
+          // Try local Socket.io first, then Pusher
+          if (this.rfidGateway) {
+            try {
+              this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
+              const socketLatency = Date.now() - startTime;
+              this.logger.debug(`⚡ Socket.io (local) sent: ${socketLatency}ms for ${data.rfid}`);
+              return socketLatency;
+            } catch (localErr) {
+              this.logger.warn(`Socket.io (local) failed: ${localErr.message} - Using Pusher fallback`);
+              return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+            }
+          } else {
+            return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+          }
+        });
+      } catch (err) {
+        this.logger.warn(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+        // Fall through to local Socket.io (if available) or Pusher
+        // Continue to next priority (local Socket.io or Pusher)
+      }
+    }
+    
+    // ⚡ Priority 1 (Development) / Priority 2 (Production): Try local Socket.io (if available)
     if (this.rfidGateway) {
       try {
         this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
@@ -305,21 +358,19 @@ export class PusherService {
         return Promise.resolve(socketLatency);
       } catch (err) {
         this.logger.warn(`Socket.io (local) failed: ${err.message}`);
-        // Continue to external Socket.io server
+        // Continue to external Socket.io server or Pusher
       }
     }
     
-    // ⚡ Priority 2: Try external Socket.io server (Railway/Render) via HTTP
-    const externalSocketUrl = this.config.get<string>('EXTERNAL_SOCKET_IO_URL');
-    if (externalSocketUrl) {
-      // Wait for Socket.io response - if successful, return early (don't use Pusher)
+    // ⚡ Priority 2 (Development): Try external Socket.io server (Railway/Render) via HTTP
+    if (!isProduction && externalSocketUrl) {
       try {
         return firstValueFrom(
           this.httpService.post(`${externalSocketUrl}/emit`, {
             event: 'rfid-urgent',
             data: emergencyPayload
           }, {
-            timeout: 3000, // 3 second timeout (increased from 1s)
+            timeout: 3000,
             headers: {
               'Content-Type': 'application/json',
               'X-Source': 'tritrackit-api-vercel'
@@ -336,19 +387,18 @@ export class PusherService {
         })
         .catch((err) => {
           this.logger.warn(`❌ Socket.io (external) failed: ${err.message} - Using Pusher fallback`);
-          // Fall through to Pusher fallback
           return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
         });
       } catch (err) {
-        // Catch any synchronous errors (e.g., invalid URL, network setup issues)
         this.logger.warn(`❌ Socket.io (external) setup failed: ${err.message} - Using Pusher fallback`);
         return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
       }
-    } else {
-      this.logger.debug('EXTERNAL_SOCKET_IO_URL not configured, using Pusher only');
     }
     
     // 🔄 Priority 3: Fallback to Pusher (if Socket.io fails or not available)
+    if (!externalSocketUrl) {
+      this.logger.debug('EXTERNAL_SOCKET_IO_URL not configured, using Pusher only');
+    }
     return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
   }
 
