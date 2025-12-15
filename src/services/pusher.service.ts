@@ -306,6 +306,7 @@ export class PusherService {
     // ⚡ DEVELOPMENT: Try local Socket.io first (for local testing)
     if (isProduction && externalSocketUrl) {
       // ⚡ Priority 1 (Production): External Socket.io server (Railway) via HTTP
+      this.logger.log(`🚀 [${requestId}] Attempting Railway Socket.io call to: ${externalSocketUrl}/emit`);
       try {
         return firstValueFrom(
           this.httpService.post(`${externalSocketUrl}/emit`, {
@@ -328,7 +329,9 @@ export class PusherService {
           return latency;
         })
         .catch((err) => {
-          this.logger.warn(`❌ Socket.io (Railway) failed: ${err.message} - Trying local Socket.io or Pusher`);
+          const latency = Date.now() - startTime;
+          this.logger.error(`❌ Socket.io (Railway) failed after ${latency}ms: ${err.message} - Trying local Socket.io or Pusher`);
+          this.logger.error(`❌ Railway error details: ${JSON.stringify({ code: err.code, status: err.response?.status, statusText: err.response?.statusText })}`);
           // Fall through to local Socket.io (if available) or Pusher
           // Try local Socket.io first, then Pusher
           if (this.rfidGateway) {
@@ -346,7 +349,8 @@ export class PusherService {
           }
         });
       } catch (err) {
-        this.logger.warn(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+        this.logger.error(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+        this.logger.error(`❌ Setup error stack: ${err.stack}`);
         // Fall through to local Socket.io (if available) or Pusher
         // Continue to next priority (local Socket.io or Pusher)
       }
