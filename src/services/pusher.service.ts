@@ -264,6 +264,19 @@ export class PusherService {
 
   sendRegistrationUrgent(data: any): Promise<number> {
     const startTime = Date.now();
+    const requestId = `push_${startTime}_${data.rfid?.substring(0, 8) || 'unknown'}`;
+    
+    // ⚡ Enhanced logging for debugging
+    this.logger.log(`🎯 [${requestId}] sendRegistrationUrgent CALLED for RFID: ${data.rfid}`);
+    this.logger.debug(`📋 [${requestId}] Payload:`, {
+      rfid: data.rfid,
+      scannerCode: data.scannerCode,
+      action: data.action,
+      location: data.location?.name || data.location,
+      locationId: data.locationId || data.location?.locationId,
+      hasModelId: !!(data.modelId || data.ModelId),
+      modelId: data.modelId || data.ModelId
+    });
     
     const locationName = data.location?.name || (typeof data.location === 'string' ? data.location : 'Unknown');
     const locationId = data.location?.locationId || data.locationId;

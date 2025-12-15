@@ -224,42 +224,58 @@ let PusherService = PusherService_1 = class PusherService {
         const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
         if (externalSocketUrl) {
             try {
-                (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
+                return (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
                     event: 'rfid-urgent',
                     data: emergencyPayload
                 }, {
-                    timeout: 1000,
+                    timeout: 3000,
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-Source': 'tritrackit-api-vercel'
                     }
-                })).then(() => {
+                }))
+                    .then((response) => {
                     const latency = Date.now() - startTime;
-                    this.logger.debug(`⚡ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
-                }).catch((err) => {
-                    this.logger.warn(`Socket.io (external) failed: ${err.message}, using Pusher fallback`);
+                    this.logger.log(`✅ Socket.io (external) sent: ${latency}ms for ${data.rfid}`);
+                    if (response === null || response === void 0 ? void 0 : response.data) {
+                        this.logger.debug(`📊 Socket.io response: ${JSON.stringify(response.data)}`);
+                    }
+                    return latency;
+                })
+                    .catch((err) => {
+                    this.logger.warn(`❌ Socket.io (external) failed: ${err.message} - Using Pusher fallback`);
+                    return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
                 });
             }
             catch (err) {
-                this.logger.warn(`Socket.io (external) setup failed: ${err.message}, using Pusher fallback`);
+                this.logger.warn(`❌ Socket.io (external) setup failed: ${err.message} - Using Pusher fallback`);
+                return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
             }
         }
+        else {
+            this.logger.debug('EXTERNAL_SOCKET_IO_URL not configured, using Pusher only');
+        }
+        return this.fallbackToPusher(emergencyPayload, startTime, data.rfid);
+    }
+    fallbackToPusher(emergencyPayload, startTime, rfid) {
+        this.logger.debug(`🔄 Using Pusher fallback for ${rfid}`);
         return this.pusher.trigger('rfid-emergency-bypass', 'rfid-urgent', emergencyPayload)
             .then(() => {
             const latency = Date.now() - startTime;
             const environment = this.config.get('NODE_ENV') || 'unknown';
             const cluster = this.config.get('PUSHER_CLUSTER') || 'unknown';
             if (latency > 30) {
-                this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${data.rfid} (env: ${environment}, cluster: ${cluster})`);
+                this.logger.warn(`⚠️ Emergency RFID latency (Pusher): ${latency}ms for ${rfid} (env: ${environment}, cluster: ${cluster})`);
             }
             else {
-                this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms`);
+                this.logger.debug(`⚡ Emergency RFID sent (Pusher): ${latency}ms for ${rfid}`);
             }
             return latency;
         })
             .catch((err) => {
             const latency = Date.now() - startTime;
             const environment = this.config.get('NODE_ENV') || 'unknown';
-            this.logger.error(`Emergency channel failed: ${err.message} (${latency}ms, env: ${environment})`);
+            this.logger.error(`💥 All notification methods failed: ${err.message} (${latency}ms, env: ${environment})`);
             return latency;
         });
     }

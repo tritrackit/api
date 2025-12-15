@@ -1098,6 +1098,22 @@ let UnitsService = UnitsService_1 = class UnitsService {
                         }
                         this.logger.debug(`Creating new unit for RFID: ${rfid} via registration scanner`);
                         try {
+                            const models = await entityManager.find(Model_1.Model, {
+                                order: { modelId: 'ASC' },
+                                take: 1,
+                            });
+                            const defaultModel = models.length > 0 ? models[0] : null;
+                            if (!defaultModel) {
+                                this.logger.error(`No models found in database. Cannot create unit for RFID: ${rfid}`);
+                                registerEvents.push({
+                                    rfid,
+                                    scannerCode,
+                                    timestamp: log.timestamp,
+                                    employeeUser: scanner.assignedEmployeeUser,
+                                    location: scanner.location,
+                                });
+                                continue;
+                            }
                             const newUnit = new Units_1.Units();
                             newUnit.rfid = rfid;
                             newUnit.chassisNo = `CH-${rfid}`;
@@ -1107,6 +1123,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
                             newUnit.status = scanner.status;
                             newUnit.location = scanner.location;
                             newUnit.createdBy = scanner.assignedEmployeeUser;
+                            newUnit.model = defaultModel;
                             const savedUnit = await entityManager.save(Units_1.Units, newUnit);
                             savedUnit.unitCode = `U-${(0, utils_1.generateIndentityCode)(savedUnit.unitId)}`;
                             await entityManager.save(Units_1.Units, savedUnit);

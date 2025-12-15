@@ -37,6 +37,7 @@ export declare class PusherService {
         employeeUser?: EmployeeUsers;
     }): Promise<void>;
     sendRegistrationUrgent(data: any): Promise<number>;
+    private fallbackToPusher;
     sendTriggerRegisterAwait(employeeUserCode: string, data: {
         rfid: string;
         scannerCode: string;

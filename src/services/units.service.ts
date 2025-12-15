@@ -1215,8 +1215,12 @@ export class UnitsService {
 
   async unitLogs(logsDto: LogsDto, scannerCode: string) {
     const processStart = Date.now();
+    const requestId = `req_${processStart}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    this.logger.log(`🚀 [${requestId}] RFID Scan received: ${logsDto.data?.length || 0} RFID(s)`);
     
     if (!logsDto?.data?.length) {
+      this.logger.warn(`⚠️ [${requestId}] No RFID data in request`);
       return [];
     }
 
@@ -1247,6 +1251,7 @@ export class UnitsService {
           alreadyNotifiedRfids.add(rfid);
           
           // ⚡ Send URGENT notification IMMEDIATELY (fire-and-forget)
+          this.logger.log(`📤 [${requestId}] Sending urgent notification for RFID: ${rfid} (BEFORE database save)`);
           this.pusherService.sendRegistrationUrgent({
             rfid,
             scannerCode,
@@ -1255,14 +1260,19 @@ export class UnitsService {
             employeeUser: scanner.assignedEmployeeUser,
             _immediate: true,
             _sentAt: Date.now()
-          }).catch(err => {
-            this.logger.error(`Failed to send urgent registration event: ${err.message}`);
+          })
+          .then((latency) => {
+            this.logger.log(`✅ [${requestId}] Notification sent for ${rfid}: ${latency}ms`);
+          })
+          .catch(err => {
+            this.logger.error(`❌ [${requestId}] Notification failed for ${rfid}: ${err.message}`);
           });
         }
       }
     }
 
     // ⚡ STEP 3: Process database operations in transaction
+    this.logger.log(`💾 [${requestId}] Attempting database save for ${logsDto.data.length} RFID(s)`);
     const result = await this.unitsRepo.manager.transaction(async (entityManager) => {
       const unitLogs: UnitLogs[] = [];
       const registerEvents: Array<{
@@ -1614,13 +1624,13 @@ export class UnitsService {
       }
   
       const totalTime = Date.now() - processStart;
-      this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, ${result?.unitLogs?.length || 0} in transaction`);
+      this.logger.log(`✅ [${requestId}] Database saved: ${totalTime}ms, ${immediateNotifications.length} immediate notifications, ${result?.unitLogs?.length || 0} unit logs created`);
       
       return result.unitLogs;
     }
 
     const totalTime = Date.now() - processStart;
-    this.logger.debug(`⚡ unitLogs processed: ${totalTime}ms, ${immediateNotifications.length} immediate, 0 in transaction`);
+    this.logger.log(`✅ [${requestId}] Processing complete: ${totalTime}ms, ${immediateNotifications.length} immediate notifications, 0 in transaction`);
     return Array.isArray(result) ? result : [];
   }
 
