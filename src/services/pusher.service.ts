@@ -299,6 +299,9 @@ export class PusherService {
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     const externalSocketUrl = this.config.get<string>('EXTERNAL_SOCKET_IO_URL');
     
+    // 🔍 DEBUG: Log environment check
+    this.logger.log(`🔍 [${requestId}] DEBUG: isProduction=${isProduction}, externalSocketUrl=${externalSocketUrl ? `SET (${externalSocketUrl.substring(0, 30)}...)` : 'NOT SET'}`);
+    
     // ⚡ PRODUCTION: Prioritize Railway Socket.io (Vercel doesn't support WebSockets)
     // ⚡ DEVELOPMENT: Try local Socket.io first (for local testing)
     if (isProduction && externalSocketUrl) {
