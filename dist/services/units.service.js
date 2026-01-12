@@ -371,9 +371,10 @@ let UnitsService = UnitsService_1 = class UnitsService {
             this.getScannerCached(this.unitsRepo.manager, scannerCode),
             this.getUnitCached(this.unitsRepo.manager, rfid)
         ]);
+        this.logger.debug(`⚡ Registration check: RFID=${rfid}, Scanner=${scannerCode}, ExistingUnit=${existingUnit ? `Found (${existingUnit.unitCode})` : 'Not Found'}`);
         this.sendPredictiveNotification(rfid, scannerCode, transactionId, scanner || undefined);
         if (existingUnit) {
-            this.logger.debug(`⚡ Existing RFID detected: ${rfid} - Updating to DELIVERED`);
+            this.logger.debug(`⚡ Existing RFID detected: ${rfid} (UnitCode: ${existingUnit.unitCode}) - Updating to DELIVERED`);
             if (!scanner) {
                 this.sendRegistrationFailed(rfid, transactionId, "Scanner not found");
                 throw Error("Registration scanner not found");
@@ -400,6 +401,27 @@ let UnitsService = UnitsService_1 = class UnitsService {
             unit = await this.executeMinimalTransaction(rfid, scanner, additionalData);
         }
         catch (error) {
+            if (error["message"] &&
+                (error["message"].includes("duplicate key") ||
+                    error["message"].includes("violates unique constraint")) &&
+                (error["message"].includes("rfid") || error["message"].includes("RFID") || error["message"].includes("u_units"))) {
+                this.logger.debug(`⚡ Duplicate RFID detected via database constraint: ${rfid} - Attempting to update to DELIVERED`);
+                const existingUnit = await this.unitsRepo.manager.findOne(Units_1.Units, {
+                    where: { rfid, active: true },
+                    relations: ["location", "status", "model"]
+                });
+                if (existingUnit) {
+                    this.logger.debug(`⚡ Found existing unit via database query: ${existingUnit.unitCode} - Updating to DELIVERED`);
+                    const updatedUnit = await this.updateExistingUnitToDelivered(existingUnit, scanner, transactionId);
+                    const totalTime = Date.now() - predictiveSentAt;
+                    this.logger.debug(`⚡ Existing RFID updated to DELIVERED (via duplicate catch): ${totalTime}ms for ${rfid}`);
+                    const cleanedUnit = await this.unitsRepo.findOne({
+                        where: { unitId: updatedUnit.unitId, active: true },
+                        relations: ["model", "location", "status", "createdBy", "updatedBy"]
+                    });
+                    return Object.assign(Object.assign({}, this.cleanUnitResponse(cleanedUnit)), { _existingRfid: true, _updatedToDelivered: true, _transactionId: transactionId, _predictiveSentAt: predictiveSentAt, _totalLatency: totalTime, _detectedVia: "duplicate_constraint" });
+                }
+            }
             this.sendRegistrationFailed(rfid, transactionId, error.message);
             throw error;
         }
@@ -467,16 +489,18 @@ let UnitsService = UnitsService_1 = class UnitsService {
     async updateExistingUnitToDelivered(existingUnit, scanner, transactionId) {
         return await this.unitsRepo.manager.transaction(async (entityManager) => {
             var _a;
-            this.logger.debug(`⚡ Updating existing unit to DELIVERED: ${existingUnit.rfid}`);
+            this.logger.debug(`⚡ Updating existing unit to DELIVERED: ${existingUnit.rfid} (UnitId: ${existingUnit.unitId})`);
             const unit = await entityManager.findOne(Units_1.Units, {
                 where: { unitId: existingUnit.unitId, active: true },
                 relations: ["location", "status", "model", "createdBy", "updatedBy"]
             });
             if (!unit) {
+                this.logger.error(`Unit not found for update: ${existingUnit.rfid} (UnitId: ${existingUnit.unitId})`);
                 throw Error(units_constant_1.UNIT_ERROR_NOT_FOUND);
             }
             const previousLocation = unit.location;
             const previousStatus = unit.status;
+            this.logger.debug(`Current location: ${previousLocation === null || previousLocation === void 0 ? void 0 : previousLocation.name} (${previousLocation === null || previousLocation === void 0 ? void 0 : previousLocation.locationId}), Current status: ${previousStatus === null || previousStatus === void 0 ? void 0 : previousStatus.name} (${previousStatus === null || previousStatus === void 0 ? void 0 : previousStatus.statusId})`);
             let deliveredLocation = null;
             deliveredLocation = await entityManager.findOne(Locations_1.Locations, {
                 where: {
@@ -508,8 +532,10 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 }
             }
             if (!deliveredLocation) {
+                this.logger.error(`DELIVERED location not found in database for RFID: ${existingUnit.rfid}`);
                 throw Error("DELIVERED location not found in database. Please ensure a location with name 'Delivered' or code 'DELIVERED' exists.");
             }
+            this.logger.debug(`Found DELIVERED location: ${deliveredLocation.name} (${deliveredLocation.locationId})`);
             const deliveredStatusKey = cache_constant_1.CacheKeys.status.byId(status_constants_1.STATUS.DELIVERED.toString());
             let deliveredStatus = this.cacheService.get(deliveredStatusKey);
             if (!deliveredStatus) {
@@ -523,15 +549,22 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 }
             }
             if (!deliveredStatus) {
+                this.logger.error(`DELIVERED status (ID: ${status_constants_1.STATUS.DELIVERED}) not found in database for RFID: ${existingUnit.rfid}`);
                 throw Error(`DELIVERED status (ID: ${status_constants_1.STATUS.DELIVERED}) not found in database.`);
             }
+            this.logger.debug(`Found DELIVERED status: ${deliveredStatus.name} (${deliveredStatus.statusId})`);
             unit.location = deliveredLocation;
             unit.status = deliveredStatus;
             unit.lastUpdatedAt = await (0, utils_1.getDate)();
             if (scanner.assignedEmployeeUser) {
                 unit.updatedBy = scanner.assignedEmployeeUser;
             }
+            else {
+                this.logger.warn(`Scanner ${scanner.scannerCode} does not have assigned employee user for RFID: ${existingUnit.rfid}`);
+            }
+            this.logger.debug(`Saving unit update: location=${deliveredLocation.name}, status=${deliveredStatus.name}`);
             const updatedUnit = await entityManager.save(Units_1.Units, unit);
+            this.logger.debug(`Unit saved successfully: ${updatedUnit.unitCode} (RFID: ${updatedUnit.rfid})`);
             const unitLog = new UnitLogs_1.UnitLogs();
             unitLog.timestamp = await (0, utils_1.getDate)();
             unitLog.unit = updatedUnit;
@@ -1132,14 +1165,17 @@ let UnitsService = UnitsService_1 = class UnitsService {
     }
     async getUnitCached(em, rfid) {
         const key = this.keyUnit(rfid);
-        const cached = this.cacheService.get(key);
-        if (cached !== undefined)
-            return cached;
-        const unit = await em.findOne(Units_1.Units, { where: { rfid, active: true }, relations: ["location", "status", "model"] });
+        const unit = await em.findOne(Units_1.Units, {
+            where: { rfid, active: true },
+            relations: ["location", "status", "model"]
+        });
         if (unit) {
             this.cacheService.set(key, unit, { ttlSeconds: 2 });
+            this.logger.debug(`getUnitCached: Found existing unit for RFID ${rfid}: ${unit.unitCode}`);
+            return unit;
         }
-        return unit !== null && unit !== void 0 ? unit : null;
+        this.logger.debug(`getUnitCached: No existing unit found for RFID ${rfid}`);
+        return null;
     }
     async getLastLogCached(em, rfid) {
         const key = this.keyLastLog(rfid);

@@ -225,6 +225,7 @@ let PusherService = PusherService_1 = class PusherService {
         const externalSocketUrl = this.config.get('EXTERNAL_SOCKET_IO_URL');
         this.logger.log(`🔍 [${requestId}] DEBUG: isProduction=${isProduction}, externalSocketUrl=${externalSocketUrl ? `SET (${externalSocketUrl.substring(0, 30)}...)` : 'NOT SET'}`);
         if (isProduction && externalSocketUrl) {
+            this.logger.log(`🚀 [${requestId}] Attempting Railway Socket.io call to: ${externalSocketUrl}/emit`);
             try {
                 return (0, rxjs_1.firstValueFrom)(this.httpService.post(`${externalSocketUrl}/emit`, {
                     event: 'rfid-urgent',
@@ -245,7 +246,10 @@ let PusherService = PusherService_1 = class PusherService {
                     return latency;
                 })
                     .catch((err) => {
-                    this.logger.warn(`❌ Socket.io (Railway) failed: ${err.message} - Trying local Socket.io or Pusher`);
+                    var _a, _b;
+                    const latency = Date.now() - startTime;
+                    this.logger.error(`❌ Socket.io (Railway) failed after ${latency}ms: ${err.message} - Trying local Socket.io or Pusher`);
+                    this.logger.error(`❌ Railway error details: ${JSON.stringify({ code: err.code, status: (_a = err.response) === null || _a === void 0 ? void 0 : _a.status, statusText: (_b = err.response) === null || _b === void 0 ? void 0 : _b.statusText })}`);
                     if (this.rfidGateway) {
                         try {
                             this.rfidGateway.emitRfidEvent('rfid-urgent', emergencyPayload);
@@ -264,7 +268,8 @@ let PusherService = PusherService_1 = class PusherService {
                 });
             }
             catch (err) {
-                this.logger.warn(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+                this.logger.error(`❌ Socket.io (Railway) setup failed: ${err.message} - Trying local Socket.io or Pusher`);
+                this.logger.error(`❌ Setup error stack: ${err.stack}`);
             }
         }
         if (this.rfidGateway) {

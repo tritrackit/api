@@ -426,11 +426,13 @@ export class UnitsService {
       this.getUnitCached(this.unitsRepo.manager, rfid)
     ]);
     
+    this.logger.debug(`⚡ Registration check: RFID=${rfid}, Scanner=${scannerCode}, ExistingUnit=${existingUnit ? `Found (${existingUnit.unitCode})` : 'Not Found'}`);
+    
     this.sendPredictiveNotification(rfid, scannerCode, transactionId, scanner || undefined);
     
     // If existing RFID detected, update location and status to "Delivered"
     if (existingUnit) {
-      this.logger.debug(`⚡ Existing RFID detected: ${rfid} - Updating to DELIVERED`);
+      this.logger.debug(`⚡ Existing RFID detected: ${rfid} (UnitCode: ${existingUnit.unitCode}) - Updating to DELIVERED`);
       
       if (!scanner) {
         this.sendRegistrationFailed(rfid, transactionId, "Scanner not found");
@@ -476,6 +478,50 @@ export class UnitsService {
     try {
       unit = await this.executeMinimalTransaction(rfid, scanner, additionalData);
     } catch (error) {
+      // If duplicate key error (RFID already exists), try to update it to Delivered instead
+      if (
+        error["message"] &&
+        (error["message"].includes("duplicate key") ||
+          error["message"].includes("violates unique constraint")) &&
+        (error["message"].includes("rfid") || error["message"].includes("RFID") || error["message"].includes("u_units"))
+      ) {
+        this.logger.debug(`⚡ Duplicate RFID detected via database constraint: ${rfid} - Attempting to update to DELIVERED`);
+        
+        // Try to find the existing unit and update it
+        const existingUnit = await this.unitsRepo.manager.findOne(Units, {
+          where: { rfid, active: true },
+          relations: ["location", "status", "model"]
+        });
+        
+        if (existingUnit) {
+          this.logger.debug(`⚡ Found existing unit via database query: ${existingUnit.unitCode} - Updating to DELIVERED`);
+          const updatedUnit = await this.updateExistingUnitToDelivered(
+            existingUnit,
+            scanner,
+            transactionId
+          );
+          
+          const totalTime = Date.now() - predictiveSentAt;
+          this.logger.debug(`⚡ Existing RFID updated to DELIVERED (via duplicate catch): ${totalTime}ms for ${rfid}`);
+          
+          const cleanedUnit = await this.unitsRepo.findOne({
+            where: { unitId: updatedUnit.unitId, active: true },
+            relations: ["model", "location", "status", "createdBy", "updatedBy"]
+          });
+          
+          return {
+            ...this.cleanUnitResponse(cleanedUnit),
+            _existingRfid: true,
+            _updatedToDelivered: true,
+            _transactionId: transactionId,
+            _predictiveSentAt: predictiveSentAt,
+            _totalLatency: totalTime,
+            _detectedVia: "duplicate_constraint"
+          };
+        }
+      }
+      
+      // If not a duplicate error, or if we couldn't find the unit, throw the original error
       this.sendRegistrationFailed(rfid, transactionId, error.message);
       throw error;
     }
@@ -575,7 +621,7 @@ export class UnitsService {
     transactionId: string
   ): Promise<Units> {
     return await this.unitsRepo.manager.transaction(async (entityManager) => {
-      this.logger.debug(`⚡ Updating existing unit to DELIVERED: ${existingUnit.rfid}`);
+      this.logger.debug(`⚡ Updating existing unit to DELIVERED: ${existingUnit.rfid} (UnitId: ${existingUnit.unitId})`);
       
       // Get the full unit with relations
       const unit = await entityManager.findOne(Units, {
@@ -584,11 +630,14 @@ export class UnitsService {
       });
       
       if (!unit) {
+        this.logger.error(`Unit not found for update: ${existingUnit.rfid} (UnitId: ${existingUnit.unitId})`);
         throw Error(UNIT_ERROR_NOT_FOUND);
       }
       
       const previousLocation = unit.location;
       const previousStatus = unit.status;
+      
+      this.logger.debug(`Current location: ${previousLocation?.name} (${previousLocation?.locationId}), Current status: ${previousStatus?.name} (${previousStatus?.statusId})`);
       
       // Get "Delivered" location - try multiple ways
       let deliveredLocation: Locations | null = null;
@@ -629,8 +678,11 @@ export class UnitsService {
       }
       
       if (!deliveredLocation) {
+        this.logger.error(`DELIVERED location not found in database for RFID: ${existingUnit.rfid}`);
         throw Error("DELIVERED location not found in database. Please ensure a location with name 'Delivered' or code 'DELIVERED' exists.");
       }
+      
+      this.logger.debug(`Found DELIVERED location: ${deliveredLocation.name} (${deliveredLocation.locationId})`);
       
       // Get "Delivered" status
       const deliveredStatusKey = CacheKeys.status.byId(STATUS.DELIVERED.toString());
@@ -647,8 +699,11 @@ export class UnitsService {
       }
       
       if (!deliveredStatus) {
+        this.logger.error(`DELIVERED status (ID: ${STATUS.DELIVERED}) not found in database for RFID: ${existingUnit.rfid}`);
         throw Error(`DELIVERED status (ID: ${STATUS.DELIVERED}) not found in database.`);
       }
+      
+      this.logger.debug(`Found DELIVERED status: ${deliveredStatus.name} (${deliveredStatus.statusId})`);
       
       // Update unit location and status
       unit.location = deliveredLocation;
@@ -658,10 +713,14 @@ export class UnitsService {
       // Set updatedBy to scanner's assigned employee user
       if (scanner.assignedEmployeeUser) {
         unit.updatedBy = scanner.assignedEmployeeUser;
+      } else {
+        this.logger.warn(`Scanner ${scanner.scannerCode} does not have assigned employee user for RFID: ${existingUnit.rfid}`);
       }
       
       // Save the updated unit
+      this.logger.debug(`Saving unit update: location=${deliveredLocation.name}, status=${deliveredStatus.name}`);
       const updatedUnit = await entityManager.save(Units, unit);
+      this.logger.debug(`Unit saved successfully: ${updatedUnit.unitCode} (RFID: ${updatedUnit.rfid})`);
       
       // Create UnitLog entry for the change
       const unitLog = new UnitLogs();
@@ -1371,14 +1430,25 @@ export class UnitsService {
     rfid: string
   ): Promise<Units | null> {
     const key = this.keyUnit(rfid);
-    const cached = this.cacheService.get<Units | null>(key);
-    if (cached !== undefined) return cached;
-
-    const unit = await em.findOne(Units, { where: { rfid, active: true }, relations: ["location", "status", "model"]  });
+    
+    // For registration checks, always query database directly to ensure we detect existing units
+    // Don't use cache for existence checks as it might have stale null values or miss recently created units
+    const unit = await em.findOne(Units, { 
+      where: { rfid, active: true }, 
+      relations: ["location", "status", "model"]  
+    });
+    
     if (unit) {
+      // Only cache if we found a unit
       this.cacheService.set(key, unit, { ttlSeconds: 2 });
+      this.logger.debug(`getUnitCached: Found existing unit for RFID ${rfid}: ${unit.unitCode}`);
+      return unit;
     }
-    return unit ?? null;
+    
+    // Don't cache null results for registration checks - always check fresh
+    // This ensures we detect units that were just created
+    this.logger.debug(`getUnitCached: No existing unit found for RFID ${rfid}`);
+    return null;
   }
 
   private async getLastLogCached(
