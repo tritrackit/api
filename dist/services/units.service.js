@@ -488,7 +488,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
     }
     async updateExistingUnitToDelivered(existingUnit, scanner, transactionId) {
         return await this.unitsRepo.manager.transaction(async (entityManager) => {
-            var _a;
+            var _a, _b, _c;
             this.logger.debug(`⚡ Updating existing unit to DELIVERED: ${existingUnit.rfid} (UnitId: ${existingUnit.unitId})`);
             const unit = await entityManager.findOne(Units_1.Units, {
                 where: { unitId: existingUnit.unitId, active: true },
@@ -553,6 +553,20 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 throw Error(`DELIVERED status (ID: ${status_constants_1.STATUS.DELIVERED}) not found in database.`);
             }
             this.logger.debug(`Found DELIVERED status: ${deliveredStatus.name} (${deliveredStatus.statusId})`);
+            const isAlreadyDelivered = ((_a = unit.location) === null || _a === void 0 ? void 0 : _a.locationId) === deliveredLocation.locationId &&
+                ((_b = unit.status) === null || _b === void 0 ? void 0 : _b.statusId) === deliveredStatus.statusId;
+            if (isAlreadyDelivered) {
+                this.logger.debug(`Unit ${unit.unitCode} (RFID: ${existingUnit.rfid}) is already at DELIVERED location and status - Skipping update`);
+                unit.lastUpdatedAt = await (0, utils_1.getDate)();
+                if (scanner.assignedEmployeeUser) {
+                    unit.updatedBy = scanner.assignedEmployeeUser;
+                }
+                await entityManager.save(Units_1.Units, unit);
+                this.cacheService.del(cache_constant_1.CacheKeys.units.byCode(unit.unitCode));
+                this.cacheService.del(this.keyUnit(unit.rfid));
+                this.cacheService.delByPrefix(cache_constant_1.CacheKeys.units.prefix);
+                return unit;
+            }
             unit.location = deliveredLocation;
             unit.status = deliveredStatus;
             unit.lastUpdatedAt = await (0, utils_1.getDate)();
@@ -587,7 +601,7 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 previousStatus: previousStatus.name,
                 timestamp: new Date(),
                 _existingRfidUpdate: true,
-                _scannedAt: ((_a = scanner.location) === null || _a === void 0 ? void 0 : _a.name) || 'Unknown Scanner Location'
+                _scannedAt: ((_c = scanner.location) === null || _c === void 0 ? void 0 : _c.name) || 'Unknown Scanner Location'
             };
             this.pusherService.reSync('units', pusherData);
             this.logger.debug(`Pusher event triggered for existing RFID update to DELIVERED: ${updatedUnit.unitCode} (RFID: ${updatedUnit.rfid})`);
@@ -1326,12 +1340,68 @@ let UnitsService = UnitsService_1 = class UnitsService {
                 const isSameLocation = ((_p = unit.location) === null || _p === void 0 ? void 0 : _p.locationId) === ((_q = scanner.location) === null || _q === void 0 ? void 0 : _q.locationId);
                 this.logger.debug(`Same location? ${isSameLocation}`);
                 if (scanner.scannerType === "REGISTRATION") {
-                    const prevStatusId = (_s = Number((_r = lastLog === null || lastLog === void 0 ? void 0 : lastLog.status) === null || _r === void 0 ? void 0 : _r.statusId)) !== null && _s !== void 0 ? _s : status_constants_1.STATUS.FOR_DELIVERY;
-                    const isForward = prevStatusId === null || newStatusId > prevStatusId;
-                    this.logger.debug(`Registration scanner - Is Forward? ${isForward} (${prevStatusId} → ${newStatusId})`);
-                    if (!isForward) {
-                        this.logger.warn(`Registration scanner blocked - not forward progression`);
+                    this.logger.debug(`⚡ REGISTRATION scanner detected existing RFID: ${rfid} - Updating to DELIVERED`);
+                    try {
+                        const previousLocation = unit.location;
+                        const previousStatus = unit.status;
+                        let deliveredLocation = null;
+                        deliveredLocation = await entityManager.findOne(Locations_1.Locations, {
+                            where: { locationCode: 'DELIVERED', active: true },
+                        });
+                        if (!deliveredLocation) {
+                            deliveredLocation = await entityManager.findOne(Locations_1.Locations, {
+                                where: { name: 'Delivered', active: true },
+                            });
+                        }
+                        if (!deliveredLocation && locations_constant_1.FIXED_LOCATIONS.DELIVERED.id) {
+                            deliveredLocation = await entityManager.findOne(Locations_1.Locations, {
+                                where: { locationId: locations_constant_1.FIXED_LOCATIONS.DELIVERED.id, active: true },
+                            });
+                        }
+                        if (!deliveredLocation) {
+                            this.logger.error(`DELIVERED location not found for RFID: ${rfid}`);
+                            throw Error("DELIVERED location not found in database.");
+                        }
+                        const deliveredStatus = await entityManager.findOne(Status_1.Status, {
+                            where: { statusId: status_constants_1.STATUS.DELIVERED.toString() },
+                        });
+                        if (!deliveredStatus) {
+                            this.logger.error(`DELIVERED status not found for RFID: ${rfid}`);
+                            throw Error(`DELIVERED status (ID: ${status_constants_1.STATUS.DELIVERED}) not found in database.`);
+                        }
+                        const isAlreadyDelivered = ((_r = unit.location) === null || _r === void 0 ? void 0 : _r.locationId) === deliveredLocation.locationId &&
+                            ((_s = unit.status) === null || _s === void 0 ? void 0 : _s.statusId) === deliveredStatus.statusId;
+                        if (isAlreadyDelivered) {
+                            this.logger.debug(`Unit ${unit.unitCode} (RFID: ${rfid}) is already at DELIVERED - Skipping update, only updating timestamp`);
+                            unit.lastUpdatedAt = await (0, utils_1.getDate)();
+                            if (scanner.assignedEmployeeUser) {
+                                unit.updatedBy = scanner.assignedEmployeeUser;
+                            }
+                            await entityManager.save(Units_1.Units, unit);
+                            unitMemo.set(rfid, unit);
+                            continue;
+                        }
+                        unit.location = deliveredLocation;
+                        unit.status = deliveredStatus;
+                        unit.lastUpdatedAt = await (0, utils_1.getDate)();
+                        if (scanner.assignedEmployeeUser) {
+                            unit.updatedBy = scanner.assignedEmployeeUser;
+                        }
+                        const updatedUnit = await entityManager.save(Units_1.Units, unit);
+                        const unitLog = new UnitLogs_1.UnitLogs();
+                        unitLog.timestamp = new Date(log.timestamp);
+                        unitLog.unit = updatedUnit;
+                        unitLog.status = deliveredStatus;
+                        unitLog.prevStatus = previousStatus;
+                        unitLog.location = deliveredLocation;
+                        unitLog.employeeUser = scanner.assignedEmployeeUser || unit.createdBy;
+                        unitLogs.push(unitLog);
+                        this.logger.debug(`✅ Existing RFID updated to DELIVERED: ${updatedUnit.unitCode} (RFID: ${rfid})`);
+                        unitMemo.set(rfid, updatedUnit);
                         continue;
+                    }
+                    catch (error) {
+                        this.logger.error(`Failed to update existing RFID to DELIVERED: ${error.message}`, error.stack);
                     }
                 }
                 else {

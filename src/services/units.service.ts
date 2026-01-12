@@ -705,6 +705,29 @@ export class UnitsService {
       
       this.logger.debug(`Found DELIVERED status: ${deliveredStatus.name} (${deliveredStatus.statusId})`);
       
+      // Check if unit is already at "Delivered" location and status
+      const isAlreadyDelivered = 
+        unit.location?.locationId === deliveredLocation.locationId &&
+        unit.status?.statusId === deliveredStatus.statusId;
+      
+      if (isAlreadyDelivered) {
+        this.logger.debug(`Unit ${unit.unitCode} (RFID: ${existingUnit.rfid}) is already at DELIVERED location and status - Skipping update`);
+        // Still update lastUpdatedAt to record the scan
+        unit.lastUpdatedAt = await getDate();
+        if (scanner.assignedEmployeeUser) {
+          unit.updatedBy = scanner.assignedEmployeeUser;
+        }
+        await entityManager.save(Units, unit);
+        
+        // Clear cache
+        this.cacheService.del(CacheKeys.units.byCode(unit.unitCode));
+        this.cacheService.del(this.keyUnit(unit.rfid));
+        this.cacheService.delByPrefix(CacheKeys.units.prefix);
+        
+        // Return without creating UnitLog or sending notification (no change)
+        return unit;
+      }
+      
       // Update unit location and status
       unit.location = deliveredLocation;
       unit.status = deliveredStatus;
@@ -1650,12 +1673,98 @@ export class UnitsService {
         this.logger.debug(`Same location? ${isSameLocation}`);
   
         if (scanner.scannerType === "REGISTRATION") {
-          const prevStatusId = Number(lastLog?.status?.statusId) ?? STATUS.FOR_DELIVERY;
-          const isForward = prevStatusId === null || newStatusId > prevStatusId;
-          this.logger.debug(`Registration scanner - Is Forward? ${isForward} (${prevStatusId} → ${newStatusId})`);
-          if (!isForward) {
-            this.logger.warn(`Registration scanner blocked - not forward progression`);
+          // If REGISTRATION scanner scans existing RFID, update to "Delivered"
+          this.logger.debug(`⚡ REGISTRATION scanner detected existing RFID: ${rfid} - Updating to DELIVERED`);
+          
+          try {
+            // Update unit to Delivered within the current transaction
+            const previousLocation = unit.location;
+            const previousStatus = unit.status;
+            
+            // Get "Delivered" location
+            let deliveredLocation: Locations | null = null;
+            deliveredLocation = await entityManager.findOne(Locations, {
+              where: { locationCode: 'DELIVERED', active: true },
+            });
+            if (!deliveredLocation) {
+              deliveredLocation = await entityManager.findOne(Locations, {
+                where: { name: 'Delivered', active: true },
+              });
+            }
+            if (!deliveredLocation && FIXED_LOCATIONS.DELIVERED.id) {
+              deliveredLocation = await entityManager.findOne(Locations, {
+                where: { locationId: FIXED_LOCATIONS.DELIVERED.id, active: true },
+              });
+            }
+            
+            if (!deliveredLocation) {
+              this.logger.error(`DELIVERED location not found for RFID: ${rfid}`);
+              throw Error("DELIVERED location not found in database.");
+            }
+            
+            // Get "Delivered" status
+            const deliveredStatus = await entityManager.findOne(Status, {
+              where: { statusId: STATUS.DELIVERED.toString() },
+            });
+            
+            if (!deliveredStatus) {
+              this.logger.error(`DELIVERED status not found for RFID: ${rfid}`);
+              throw Error(`DELIVERED status (ID: ${STATUS.DELIVERED}) not found in database.`);
+            }
+            
+            // Check if unit is already at "Delivered" location and status
+            const isAlreadyDelivered = 
+              unit.location?.locationId === deliveredLocation.locationId &&
+              unit.status?.statusId === deliveredStatus.statusId;
+            
+            if (isAlreadyDelivered) {
+              this.logger.debug(`Unit ${unit.unitCode} (RFID: ${rfid}) is already at DELIVERED - Skipping update, only updating timestamp`);
+              // Still update lastUpdatedAt to record the scan
+              unit.lastUpdatedAt = await getDate();
+              if (scanner.assignedEmployeeUser) {
+                unit.updatedBy = scanner.assignedEmployeeUser;
+              }
+              await entityManager.save(Units, unit);
+              
+              // Update unit in memo
+              unitMemo.set(rfid, unit);
+              
+              // Skip creating UnitLog and notification (no change)
+              continue;
+            }
+            
+            // Update unit
+            unit.location = deliveredLocation;
+            unit.status = deliveredStatus;
+            unit.lastUpdatedAt = await getDate();
+            if (scanner.assignedEmployeeUser) {
+              unit.updatedBy = scanner.assignedEmployeeUser;
+            }
+            
+            const updatedUnit = await entityManager.save(Units, unit);
+            
+            // Create UnitLog entry (add to array so it triggers notification)
+            const unitLog = new UnitLogs();
+            unitLog.timestamp = new Date(log.timestamp);
+            unitLog.unit = updatedUnit;
+            unitLog.status = deliveredStatus;
+            unitLog.prevStatus = previousStatus;
+            unitLog.location = deliveredLocation;
+            unitLog.employeeUser = scanner.assignedEmployeeUser || unit.createdBy;
+            unitLogs.push(unitLog); // Add to array for batch save and notification
+            
+            this.logger.debug(`✅ Existing RFID updated to DELIVERED: ${updatedUnit.unitCode} (RFID: ${rfid})`);
+            
+            // Update unit in memo
+            unitMemo.set(rfid, updatedUnit);
+            // Don't add to locationUpdatedRfids - we want it to trigger notification
+            // The unit will be included in rfidsToNotify automatically via unitLogs
+            
+            // Skip normal processing - unit already updated to Delivered
             continue;
+          } catch (error) {
+            this.logger.error(`Failed to update existing RFID to DELIVERED: ${error.message}`, error.stack);
+            // Fall through to normal processing if update fails
           }
         } else {
           this.logger.debug(`Location scanner - allowing any status change`);
