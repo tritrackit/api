@@ -13,7 +13,12 @@ export declare class UnitsService {
     private pusherService;
     private readonly cacheService;
     private readonly logger;
+    private readonly recentNotifications;
+    private readonly NOTIFICATION_COOLDOWN_MS;
+    private cleanupInterval;
     constructor(unitsRepo: Repository<Units>, pusherService: PusherService, cacheService: CacheService);
+    private startNotificationCleanup;
+    onModuleDestroy(): void;
     getPagination({ pageSize, pageIndex, order, columnDef }: {
         pageSize: any;
         pageIndex: any;
@@ -38,6 +43,7 @@ export declare class UnitsService {
     }): Promise<any>;
     private sendPredictiveNotification;
     private executeMinimalTransaction;
+    private updateExistingUnitToDelivered;
     private clearCacheImmediately;
     private sendConfirmedNotificationAsync;
     private handleAsyncPostRegistration;
